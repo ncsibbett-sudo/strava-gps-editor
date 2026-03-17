@@ -1,4 +1,5 @@
 import type { StravaActivity } from '../../types/strava';
+import { RoutePreview } from './RoutePreview';
 
 interface ActivityCardProps {
   activity: StravaActivity;
@@ -46,6 +47,13 @@ export function ActivityCard({ activity, onSelect }: ActivityCardProps) {
       onClick={() => onSelect(activity.id)}
       className="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 cursor-pointer transition-colors border border-gray-700 hover:border-strava-orange"
     >
+      {/* Route Preview */}
+      {activity.map?.summary_polyline && (
+        <div className="mb-3">
+          <RoutePreview summaryPolyline={activity.map.summary_polyline} className="w-full h-16" />
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-semibold text-white truncate">
