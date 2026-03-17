@@ -49,42 +49,28 @@ export function EditingToolbar() {
   };
 
   return (
-    <div className="absolute top-4 left-4 bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-4 z-[1000] max-w-xs">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">Editing Tools</h3>
+    <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-3">
+      <h3 className="text-xs font-semibold text-gray-300 mb-2">Editing Tools</h3>
 
       <div className="grid grid-cols-2 gap-2">
         {tools.map((tool) => (
           <button
             key={tool.id}
             onClick={() => handleToolClick(tool.id)}
-            className={`p-3 rounded-lg text-left transition-colors ${
+            className={`p-2 rounded-lg text-left transition-colors ${
               selectedTool === tool.id
                 ? 'bg-strava-orange text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
             title={tool.description}
           >
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{tool.icon}</span>
-              <span className="text-sm font-medium">{tool.name}</span>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-2xl">{tool.icon}</span>
+              <span className="text-xs font-medium whitespace-nowrap">{tool.name}</span>
             </div>
           </button>
         ))}
       </div>
-
-      {selectedTool && (
-        <div className="mt-4 p-3 bg-gray-900 rounded-lg">
-          <p className="text-xs text-gray-400">
-            {tools.find((t) => t.id === selectedTool)?.description}
-          </p>
-          <button
-            onClick={() => setSelectedTool(null)}
-            className="mt-2 text-xs text-strava-orange hover:text-orange-400"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
     </div>
   );
 }
