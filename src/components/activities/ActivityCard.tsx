@@ -73,7 +73,7 @@ export function ActivityCard({ activity, onSelect }: ActivityCardProps) {
       {/* Route Preview */}
       {activity.map?.summary_polyline && (
         <div className="mb-3">
-          <RoutePreview summaryPolyline={activity.map.summary_polyline} className="w-full h-32" />
+          <RoutePreview summaryPolyline={activity.map.summary_polyline} className="w-full h-48" />
         </div>
       )}
 
