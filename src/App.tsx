@@ -2,10 +2,19 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeAuth } from './stores/authStore';
 import { useAuth } from './hooks/useAuth';
+import { useActivities } from './hooks/useActivities';
 import { AuthCallback, LoginButton, LogoutButton } from './components/auth';
+import { ActivityList, ActivityFilters } from './components/activities';
 
 function HomePage() {
   const { isAuthenticated } = useAuth();
+  const { selectActivity, isLoadingTrack, trackError } = useActivities();
+
+  const handleActivitySelect = async (activityId: number) => {
+    await selectActivity(activityId);
+    // TODO: Navigate to editor view when ready
+    console.log('Activity selected:', activityId);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -69,12 +78,37 @@ function HomePage() {
             </div>
           </div>
         ) : (
-          <div className="text-center">
-            <h2 className="text-3xl font-bold mb-4">Welcome Back!</h2>
-            <p className="text-xl text-gray-400">
-              Select an activity from the activity browser to start editing.
-            </p>
-            <p className="text-gray-500 mt-4">(Activity browser coming soon...)</p>
+          <div>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold mb-2">Your Activities</h2>
+              <p className="text-gray-400">
+                Select an activity to view and edit its GPS track
+              </p>
+            </div>
+
+            {/* Activity Filters */}
+            <ActivityFilters />
+
+            {/* Loading state for activity selection */}
+            {isLoadingTrack && (
+              <div className="bg-blue-900/20 border border-blue-500 text-blue-200 p-4 rounded-lg mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="inline-block animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-blue-400"></div>
+                  <span>Loading GPS data...</span>
+                </div>
+              </div>
+            )}
+
+            {/* Error state for activity selection */}
+            {trackError && (
+              <div className="bg-red-900/20 border border-red-500 text-red-200 p-4 rounded-lg mb-6">
+                <p className="font-semibold">Failed to load activity GPS data</p>
+                <p className="text-sm mt-1">{trackError}</p>
+              </div>
+            )}
+
+            {/* Activity List */}
+            <ActivityList onActivitySelect={handleActivitySelect} />
           </div>
         )}
       </main>
