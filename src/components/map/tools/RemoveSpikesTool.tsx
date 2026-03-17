@@ -5,7 +5,7 @@ import { useMap } from '../../../hooks/useMap';
  * Remove Spikes tool - detects and removes GPS spikes
  */
 export function RemoveSpikesTool() {
-  const { editedTrack, setEditedTrack } = useMap();
+  const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
   const [speedThreshold, setSpeedThreshold] = useState(22); // m/s (~50 mph)
   const [distanceThreshold, setDistanceThreshold] = useState(100); // meters
   const [detectedSpikes, setDetectedSpikes] = useState<number[]>([]);
@@ -14,8 +14,16 @@ export function RemoveSpikesTool() {
     if (editedTrack) {
       const spikes = editedTrack.detectSpikes(speedThreshold, distanceThreshold);
       setDetectedSpikes(spikes);
+
+      // Update preview track with spikes removed
+      if (spikes.length > 0) {
+        const previewTrack = editedTrack.removePoints(spikes);
+        setPreviewTrack(previewTrack);
+      } else {
+        setPreviewTrack(null);
+      }
     }
-  }, [editedTrack, speedThreshold, distanceThreshold]);
+  }, [editedTrack, speedThreshold, distanceThreshold, setPreviewTrack]);
 
   if (!editedTrack) return null;
 

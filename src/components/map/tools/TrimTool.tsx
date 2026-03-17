@@ -5,7 +5,7 @@ import { useMap } from '../../../hooks/useMap';
  * Trim tool - allows trimming start/end of GPS track
  */
 export function TrimTool() {
-  const { editedTrack, setEditedTrack } = useMap();
+  const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
   const [startIndex, setStartIndex] = useState(0);
   const [endIndex, setEndIndex] = useState(0);
 
@@ -14,6 +14,14 @@ export function TrimTool() {
       setEndIndex(editedTrack.points.length - 1);
     }
   }, [editedTrack]);
+
+  // Update preview track when indices change
+  useEffect(() => {
+    if (editedTrack && startIndex < endIndex) {
+      const previewTrack = editedTrack.trim(startIndex, endIndex);
+      setPreviewTrack(previewTrack);
+    }
+  }, [editedTrack, startIndex, endIndex, setPreviewTrack]);
 
   if (!editedTrack) return null;
 
@@ -24,7 +32,7 @@ export function TrimTool() {
   ).toFixed(2);
 
   const handleApply = () => {
-    if (!editedTrack) return;
+    if (!editedTrack || startIndex >= endIndex) return;
 
     const trimmedTrack = editedTrack.trim(startIndex, endIndex);
     setEditedTrack(trimmedTrack, true);

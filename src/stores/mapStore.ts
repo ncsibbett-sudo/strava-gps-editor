@@ -8,6 +8,7 @@ interface MapState {
   // Tracks
   originalTrack: GPSTrack | null;
   editedTrack: GPSTrack | null;
+  previewTrack: GPSTrack | null;
 
   // View settings
   viewMode: ViewMode;
@@ -24,6 +25,7 @@ interface MapState {
   // Actions
   loadTrack: (track: GPSTrack) => void;
   setEditedTrack: (track: GPSTrack, addToHistory?: boolean) => void;
+  setPreviewTrack: (track: GPSTrack | null) => void;
   setViewMode: (mode: ViewMode) => void;
   setTileLayer: (layer: TileLayer) => void;
   setSelectedTool: (tool: string | null) => void;
@@ -39,6 +41,7 @@ export const useMapStore = create<MapState>((set, get) => ({
   // Initial state
   originalTrack: null,
   editedTrack: null,
+  previewTrack: null,
   viewMode: 'original',
   tileLayer: 'streets',
   selectedTool: null,
@@ -79,10 +82,23 @@ export const useMapStore = create<MapState>((set, get) => ({
         historyIndex: limitedHistory.length - 1,
         // Switch to 'both' view to show comparison when an edit is made
         viewMode: 'both',
+        // Clear preview when committing
+        previewTrack: null,
       });
     } else {
       set({ editedTrack: track });
     }
+  },
+
+  /**
+   * Set preview track for live preview before applying changes
+   */
+  setPreviewTrack: (track: GPSTrack | null) => {
+    set({
+      previewTrack: track,
+      // Switch to 'both' view when showing preview
+      viewMode: track ? 'both' : get().viewMode,
+    });
   },
 
   /**
@@ -103,7 +119,11 @@ export const useMapStore = create<MapState>((set, get) => ({
    * Set selected editing tool
    */
   setSelectedTool: (tool: string | null) => {
-    set({ selectedTool: tool });
+    set({
+      selectedTool: tool,
+      // Clear preview when changing tools
+      previewTrack: null,
+    });
   },
 
   /**
@@ -164,6 +184,7 @@ export const useMapStore = create<MapState>((set, get) => ({
     set({
       originalTrack: null,
       editedTrack: null,
+      previewTrack: null,
       viewMode: 'original',
       tileLayer: 'streets',
       selectedTool: null,

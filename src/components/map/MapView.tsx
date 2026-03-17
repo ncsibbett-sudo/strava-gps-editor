@@ -32,9 +32,10 @@ export function MapView({ className = '' }: MapViewProps) {
   const trackLayersRef = useRef<{
     original: L.Polyline | null;
     edited: L.Polyline | null;
-  }>({ original: null, edited: null });
+    preview: L.Polyline | null;
+  }>({ original: null, edited: null, preview: null });
 
-  const { originalTrack, editedTrack, viewMode, tileLayer } = useMap();
+  const { originalTrack, editedTrack, previewTrack, viewMode, tileLayer } = useMap();
 
   // Initialize map
   useEffect(() => {
@@ -87,6 +88,10 @@ export function MapView({ className = '' }: MapViewProps) {
       trackLayersRef.current.edited.remove();
       trackLayersRef.current.edited = null;
     }
+    if (trackLayersRef.current.preview) {
+      trackLayersRef.current.preview.remove();
+      trackLayersRef.current.preview = null;
+    }
 
     // Add original track if needed
     if (originalTrack && (viewMode === 'original' || viewMode === 'both')) {
@@ -105,8 +110,8 @@ export function MapView({ className = '' }: MapViewProps) {
       }
     }
 
-    // Add edited track if needed
-    if (editedTrack && (viewMode === 'edited' || viewMode === 'both')) {
+    // Add edited track if needed (but not if we have a preview)
+    if (editedTrack && !previewTrack && (viewMode === 'edited' || viewMode === 'both')) {
       const coords: L.LatLngExpression[] = editedTrack.points.map((p) => [p.lat, p.lng]);
       const editedPolyline = L.polyline(coords, {
         color: viewMode === 'both' ? '#fc4c02' : '#fc4c02', // Orange
@@ -122,14 +127,42 @@ export function MapView({ className = '' }: MapViewProps) {
       }
     }
 
-    // If showing both, fit bounds to include both tracks
-    if (viewMode === 'both' && trackLayersRef.current.original && trackLayersRef.current.edited) {
-      const originalBounds = trackLayersRef.current.original.getBounds();
-      const editedBounds = trackLayersRef.current.edited.getBounds();
-      const bounds = originalBounds.extend(editedBounds);
-      mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+    // Add preview track if available (shows instead of edited track)
+    if (previewTrack && (viewMode === 'edited' || viewMode === 'both')) {
+      const coords: L.LatLngExpression[] = previewTrack.points.map((p) => [p.lat, p.lng]);
+      const previewPolyline = L.polyline(coords, {
+        color: '#3b82f6', // Blue for preview
+        weight: 3,
+        opacity: 0.7,
+        dashArray: '10, 10', // Dashed line to indicate preview
+      }).addTo(mapRef.current);
+
+      trackLayersRef.current.preview = previewPolyline;
     }
-  }, [originalTrack, editedTrack, viewMode]);
+
+    // Fit bounds logic
+    if (viewMode === 'both') {
+      const bounds = L.latLngBounds([]);
+      let hasBounds = false;
+
+      if (trackLayersRef.current.original) {
+        bounds.extend(trackLayersRef.current.original.getBounds());
+        hasBounds = true;
+      }
+      if (trackLayersRef.current.edited) {
+        bounds.extend(trackLayersRef.current.edited.getBounds());
+        hasBounds = true;
+      }
+      if (trackLayersRef.current.preview) {
+        bounds.extend(trackLayersRef.current.preview.getBounds());
+        hasBounds = true;
+      }
+
+      if (hasBounds && mapRef.current) {
+        mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [originalTrack, editedTrack, previewTrack, viewMode]);
 
   return (
     <div

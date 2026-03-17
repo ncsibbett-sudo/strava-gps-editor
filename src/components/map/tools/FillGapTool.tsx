@@ -7,27 +7,17 @@ import { Gap } from '../../../models/GPSTrack';
  * Fill Gap tool - detects and fills GPS gaps
  */
 export function FillGapTool() {
-  const { editedTrack, setEditedTrack } = useMap();
+  const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
   const [minGapTime, setMinGapTime] = useState(30); // seconds
   const [detectedGaps, setDetectedGaps] = useState<Gap[]>([]);
 
-  useEffect(() => {
-    if (editedTrack) {
-      const gaps = editedTrack.detectGaps(minGapTime);
-      setDetectedGaps(gaps);
-    }
-  }, [editedTrack, minGapTime]);
+  const fillGapsInTrack = (track: typeof editedTrack, gaps: Gap[]) => {
+    if (!track || gaps.length === 0) return null;
 
-  if (!editedTrack) return null;
-
-  const handleFillGaps = () => {
-    if (!editedTrack || detectedGaps.length === 0) return;
-
-    // Fill gaps by interpolating points between gap start and end
-    const filledTrack = editedTrack.clone();
+    const filledTrack = track.clone();
     let offset = 0; // Track offset as we add points
 
-    detectedGaps.forEach((gap) => {
+    gaps.forEach((gap) => {
       const startIdx = gap.startIndex + offset;
       const endIdx = gap.endIndex + offset;
 
@@ -61,7 +51,33 @@ export function FillGapTool() {
       offset += interpolatedPoints.length;
     });
 
-    setEditedTrack(filledTrack, true);
+    return filledTrack;
+  };
+
+  useEffect(() => {
+    if (editedTrack) {
+      const gaps = editedTrack.detectGaps(minGapTime);
+      setDetectedGaps(gaps);
+
+      // Update preview with filled gaps
+      if (gaps.length > 0) {
+        const previewTrack = fillGapsInTrack(editedTrack, gaps);
+        setPreviewTrack(previewTrack);
+      } else {
+        setPreviewTrack(null);
+      }
+    }
+  }, [editedTrack, minGapTime, setPreviewTrack]);
+
+  if (!editedTrack) return null;
+
+  const handleFillGaps = () => {
+    if (!editedTrack || detectedGaps.length === 0) return;
+
+    const filledTrack = fillGapsInTrack(editedTrack, detectedGaps);
+    if (filledTrack) {
+      setEditedTrack(filledTrack, true);
+    }
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMap } from '../../../hooks/useMap';
 import { applyMovingAverageSmoothing, applyGaussianSmoothing } from '../../../utils/smoothing';
 
@@ -8,10 +8,23 @@ type SmoothingAlgorithm = 'movingAverage' | 'gaussian';
  * Smooth tool - applies smoothing to GPS track
  */
 export function SmoothTool() {
-  const { editedTrack, setEditedTrack } = useMap();
+  const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
   const [algorithm, setAlgorithm] = useState<SmoothingAlgorithm>('movingAverage');
   const [windowSize, setWindowSize] = useState(5);
   const [sigma, setSigma] = useState(2);
+
+  // Update preview when parameters change
+  useEffect(() => {
+    if (editedTrack) {
+      let smoothedTrack;
+      if (algorithm === 'movingAverage') {
+        smoothedTrack = applyMovingAverageSmoothing(editedTrack, windowSize);
+      } else {
+        smoothedTrack = applyGaussianSmoothing(editedTrack, sigma);
+      }
+      setPreviewTrack(smoothedTrack);
+    }
+  }, [editedTrack, algorithm, windowSize, sigma, setPreviewTrack]);
 
   if (!editedTrack) return null;
 
