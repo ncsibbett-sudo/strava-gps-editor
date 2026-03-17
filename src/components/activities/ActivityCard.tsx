@@ -26,10 +26,24 @@ export function ActivityCard({ activity, onSelect }: ActivityCardProps) {
 
   // Get activity icon based on type
   const getActivityIcon = (type: string) => {
-    switch (type.toLowerCase()) {
+    const lowerType = type.toLowerCase();
+
+    // Skiing types
+    if (lowerType.includes('ski') || lowerType.includes('snowboard')) {
+      if (lowerType.includes('nordic') || lowerType.includes('crosscountry')) {
+        return '🎿'; // Cross-country skis
+      }
+      return '⛷️'; // Downhill skier
+    }
+
+    switch (lowerType) {
       case 'run':
         return '🏃';
       case 'ride':
+      case 'virtualride':
+      case 'ebikeride':
+      case 'mountainbikeride':
+      case 'gravelride':
         return '🚴';
       case 'hike':
         return '🥾';
@@ -37,6 +51,15 @@ export function ActivityCard({ activity, onSelect }: ActivityCardProps) {
         return '🚶';
       case 'swim':
         return '🏊';
+      case 'kayaking':
+      case 'canoeing':
+      case 'rowing':
+        return '🚣';
+      case 'iceSkate':
+        return '⛸️';
+      case 'inlineskate':
+      case 'rollerski':
+        return '⛸️';
       default:
         return '📍';
     }
@@ -50,7 +73,7 @@ export function ActivityCard({ activity, onSelect }: ActivityCardProps) {
       {/* Route Preview */}
       {activity.map?.summary_polyline && (
         <div className="mb-3">
-          <RoutePreview summaryPolyline={activity.map.summary_polyline} className="w-full h-16" />
+          <RoutePreview summaryPolyline={activity.map.summary_polyline} className="w-full h-32" />
         </div>
       )}
 
