@@ -77,6 +77,8 @@ export const useMapStore = create<MapState>((set, get) => ({
         editedTrack: track,
         editHistory: limitedHistory,
         historyIndex: limitedHistory.length - 1,
+        // Switch to 'both' view to show comparison when an edit is made
+        viewMode: 'both',
       });
     } else {
       set({ editedTrack: track });
