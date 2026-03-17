@@ -99,8 +99,8 @@
     - Write unit tests for activity store
     - _Requirements: 2, 3_
 
-- [ ] 6. Build activity browser UI components
-  - [ ] 6.1 Create ActivityList and ActivityCard components
+- [x] 6. Build activity browser UI components
+  - [x] 6.1 Create ActivityList and ActivityCard components
     - Implement ActivityList with 30 activities per page
     - Create ActivityCard displaying name, date, distance, duration, type
     - Implement "Load More" pagination button
@@ -108,7 +108,7 @@
     - Write component tests for activity display
     - _Requirements: 2_
 
-  - [ ] 6.2 Implement activity search and filtering
+  - [x] 6.2 Implement activity search and filtering
     - Create ActivitySearch component with keyword filter
     - Add date range picker for filtering by date
     - Add sport type dropdown filter (Run, Ride, Hike, etc.)
@@ -116,7 +116,7 @@
     - Write component tests for filtering functionality
     - _Requirements: 3_
 
-  - [ ] 6.3 Add activity selection and navigation
+  - [x] 6.3 Add activity selection and navigation
     - Implement click handler to select activity and navigate to editor
     - Display activity thumbnail map preview on hover (P2)
     - Show loading indicator during GPS data fetch
