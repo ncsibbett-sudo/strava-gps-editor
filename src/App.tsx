@@ -3,18 +3,31 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { initializeAuth } from './stores/authStore';
 import { useAuth } from './hooks/useAuth';
 import { useActivities } from './hooks/useActivities';
+import { useMap } from './hooks/useMap';
 import { AuthCallback, LoginButton, LogoutButton } from './components/auth';
 import { ActivityList, ActivityFilters } from './components/activities';
+import { MapContainer } from './components/map';
 
 function HomePage() {
   const { isAuthenticated } = useAuth();
-  const { selectActivity, isLoadingTrack, trackError } = useActivities();
+  const { selectActivity, selectedActivityTrack, isLoadingTrack, trackError, clearSelection } = useActivities();
+  const { loadTrack, reset: resetMap } = useMap();
 
   const handleActivitySelect = async (activityId: number) => {
     await selectActivity(activityId);
-    // TODO: Navigate to editor view when ready
-    console.log('Activity selected:', activityId);
   };
+
+  const handleBackToList = () => {
+    clearSelection();
+    resetMap();
+  };
+
+  // Load track into map when selected
+  useEffect(() => {
+    if (selectedActivityTrack) {
+      loadTrack(selectedActivityTrack);
+    }
+  }, [selectedActivityTrack, loadTrack]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -74,6 +87,24 @@ function HomePage() {
                 <p className="text-gray-400">
                   Preview changes with side-by-side comparison and unlimited undo/redo.
                 </p>
+              </div>
+            </div>
+          </div>
+        ) : selectedActivityTrack ? (
+          <div>
+            {/* Map Editor View */}
+            <div className="mb-4">
+              <button
+                onClick={handleBackToList}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors flex items-center gap-2"
+              >
+                ← Back to Activities
+              </button>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div style={{ height: '600px' }}>
+                <MapContainer />
               </div>
             </div>
           </div>
