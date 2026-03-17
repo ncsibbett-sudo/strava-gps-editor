@@ -18,7 +18,8 @@
     "react-router-dom": "^6.26.2",
     "zustand": "^5.0.1",
     "leaflet": "^1.9.4",
-    "@we-gold/gpxjs": "^1.1.0"
+    "@we-gold/gpxjs": "^1.1.0",
+    "@vercel/node": "^3.2.27"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
@@ -26,7 +27,6 @@
     "@types/leaflet": "^1.9.14",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
-    "@vercel/node": "^3.2.27",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.15.0",
