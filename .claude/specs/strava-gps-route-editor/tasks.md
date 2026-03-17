@@ -126,8 +126,8 @@
 
 ## Phase 4: Map Interface
 
-- [ ] 7. Set up Leaflet map infrastructure
-  - [ ] 7.1 Create MapView component with Leaflet integration
+- [x] 7. Set up Leaflet map infrastructure
+  - [x] 7.1 Create MapView component with Leaflet integration
     - Initialize Leaflet map with OpenStreetMap tiles
     - Implement zoom, pan, and layer controls
     - Support satellite/terrain tile layer switching
@@ -135,7 +135,7 @@
     - Write component tests for map initialization
     - _Requirements: 3_
 
-  - [ ] 7.2 Implement GPS track visualization
+  - [x] 7.2 Implement GPS track visualization
     - Create TrackLayer component to render GPS polyline
     - Display original track as colored polyline
     - Show editable GPS points as draggable nodes on zoom
@@ -143,7 +143,7 @@
     - Write tests for track rendering
     - _Requirements: 3_
 
-  - [ ] 7.3 Create before/after toggle functionality
+  - [x] 7.3 Create before/after toggle functionality
     - Implement BeforeAfterToggle component with view modes
     - Support 'original', 'edited', and 'both' view modes
     - Render both tracks with different colors in 'both' mode
@@ -151,7 +151,7 @@
     - Write tests for toggle functionality
     - _Requirements: 9_
 
-  - [ ] 7.4 Create map state management
+  - [x] 7.4 Create map state management
     - Create mapStore with originalTrack, editedTrack, viewMode
     - Implement loadTrack() action to fetch and display activity
     - Implement setViewMode() action for toggling views
