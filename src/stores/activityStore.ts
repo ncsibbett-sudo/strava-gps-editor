@@ -29,6 +29,9 @@ interface ActivityState {
   // Filters
   filters: ActivityFilters;
 
+  // Computed
+  getSportTypesByFrequency: () => Array<{ type: string; count: number }>;
+
   // Actions
   loadActivities: (page?: number) => Promise<void>;
   loadMore: () => Promise<void>;
@@ -61,6 +64,26 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   trackError: null,
 
   filters: initialFilters,
+
+  /**
+   * Get sport types sorted by frequency (most common first)
+   */
+  getSportTypesByFrequency: () => {
+    const { activities } = get();
+
+    // Count occurrences of each sport type
+    const typeCounts = new Map<string, number>();
+
+    activities.forEach((activity) => {
+      const type = activity.type;
+      typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+    });
+
+    // Convert to array and sort by count (descending)
+    return Array.from(typeCounts.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+  },
 
   /**
    * Load activities from Strava API

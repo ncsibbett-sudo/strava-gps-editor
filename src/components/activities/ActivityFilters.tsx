@@ -5,8 +5,11 @@ import { useActivities } from '../../hooks/useActivities';
  * Activity search and filter component
  */
 export function ActivityFilters() {
-  const { filters, setFilters, applyFilters } = useActivities();
+  const { filters, setFilters, applyFilters, getSportTypesByFrequency } = useActivities();
   const [localFilters, setLocalFilters] = useState(filters);
+
+  // Get sport types sorted by frequency
+  const sportTypes = getSportTypesByFrequency();
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const searchQuery = e.target.value;
@@ -79,13 +82,11 @@ export function ActivityFilters() {
             className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-strava-orange"
           >
             <option value="">All Types</option>
-            <option value="Run">Run</option>
-            <option value="Ride">Ride</option>
-            <option value="Hike">Hike</option>
-            <option value="Walk">Walk</option>
-            <option value="Swim">Swim</option>
-            <option value="VirtualRide">Virtual Ride</option>
-            <option value="VirtualRun">Virtual Run</option>
+            {sportTypes.map(({ type, count }) => (
+              <option key={type} value={type}>
+                {type} ({count})
+              </option>
+            ))}
           </select>
         </div>
 
