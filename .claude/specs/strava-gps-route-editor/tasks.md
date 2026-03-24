@@ -6,18 +6,21 @@
 
 ## Phase 0: Critical MVP Requirements (BLOCKING ISSUES)
 
-- [ ] 0.1 **Strava Activity Update Integration** (CRITICAL - #1 Priority)
-  - Research Strava API activity update capabilities
-  - Implement updateActivity() API call to replace existing activity GPS data
-  - If direct update not supported: implement delete + immediate reupload with metadata preservation
-  - Preserve: name, description, photos, kudos, comments when updating
-  - Test with real Strava activities
-  - Add user-friendly update workflow (1-click update vs. upload new)
-  - Handle update errors with clear messaging
-  - Show warning dialog about what will be preserved/lost
-  - **WHY CRITICAL: Users won't manually delete/re-upload. This is a dealbreaker.**
-  - _OAuth scope needed: `activity:write`_
-  - _Requirements: 11_
+- [x] 0.1 **Strava Activity Update Integration** (CRITICAL - #1 Priority) ✅
+  - ✅ Research: Strava API does NOT support GPS replacement on existing activities
+  - ✅ Implemented strategy: upload new + optional delete original (preserves metadata)
+  - ✅ ExportButton component: Download GPX with size estimate
+  - ✅ UploadToStrava component: Full upload flow with confirmation
+  - ✅ Metadata preservation: name, description, type copied to new activity
+  - ✅ Warning dialog about kudos/comments not transferring
+  - ✅ Optional backup GPX download before upload (recommended, default checked)
+  - ✅ Optional deletion of original activity after successful upload
+  - ✅ Error handling with retry and fallback to GPX download
+  - ✅ Integrated into MapContainer right panel (visible when no tool active)
+  - ✅ Success state shows direct link to new Strava activity
+  - **COMPLETED: Users can now save edits back to Strava!**
+  - _OAuth scope: `activity:write` ✅_
+  - _Files: ExportButton.tsx, UploadToStrava.tsx, MapContainer.tsx, stravaService.ts_
 
 - [ ] 0.2 **Real Elevation Correction** (CRITICAL - #2 Priority)
   - Integrate Open-Elevation API (https://open-elevation.com/) - free, no API key

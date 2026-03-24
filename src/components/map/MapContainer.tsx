@@ -7,6 +7,7 @@ import { SmoothTool } from './tools/SmoothTool';
 import { FillGapTool } from './tools/FillGapTool';
 import { RedrawTool } from './tools/RedrawTool';
 import { DeletePointsTool } from './tools/DeletePointsTool';
+import { FixElevationTool } from './tools/FixElevationTool';
 import { ExportButton } from '../export/ExportButton';
 import { UploadToStrava } from '../export/UploadToStrava';
 import { useMap } from '../../hooks/useMap';
@@ -37,6 +38,7 @@ export function MapContainer() {
             {selectedTool === 'fillGap' && <FillGapTool />}
             {selectedTool === 'redraw' && <RedrawTool />}
             {selectedTool === 'deletePoints' && <DeletePointsTool />}
+            {selectedTool === 'fixElevation' && <FixElevationTool />}
           </>
         ) : (
           <>

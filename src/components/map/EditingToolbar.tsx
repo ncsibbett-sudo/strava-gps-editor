@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useMap } from '../../hooks/useMap';
 
-export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redraw' | 'deletePoints' | null;
+export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redraw' | 'deletePoints' | 'fixElevation' | null;
 
 /**
  * Editing toolbar component with GPS editing tools, undo/redo, and reset
@@ -70,6 +70,12 @@ export function EditingToolbar() {
       name: 'Delete Points',
       icon: '🗑️',
       description: 'Click points to delete them',
+    },
+    {
+      id: 'fixElevation' as EditingTool,
+      name: 'Fix Elevation',
+      icon: '⛰️',
+      description: 'Fix elevation from terrain data',
     },
   ];
 
