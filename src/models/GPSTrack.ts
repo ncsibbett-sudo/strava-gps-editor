@@ -275,6 +275,24 @@ export class GPSTrack {
   }
 
   /**
+   * Replace a section of the track with new points
+   * @param startIndex - Index of first point to replace
+   * @param endIndex - Index of last point to replace
+   * @param newPoints - Array of new GPS points to insert
+   * @returns New GPSTrack with section replaced
+   */
+  replaceSection(
+    startIndex: number,
+    endIndex: number,
+    newPoints: GPSPoint[]
+  ): GPSTrack {
+    const before = this.points.slice(0, startIndex);
+    const after = this.points.slice(endIndex + 1);
+    const combined = [...before, ...newPoints, ...after];
+    return new GPSTrack(combined, this.metadata);
+  }
+
+  /**
    * Create a deep copy of the track
    * @returns New GPSTrack instance
    */

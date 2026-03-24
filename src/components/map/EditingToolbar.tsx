@@ -1,6 +1,6 @@
 import { useMap } from '../../hooks/useMap';
 
-export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | null;
+export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redraw' | null;
 
 /**
  * Editing toolbar component with GPS editing tools
@@ -36,6 +36,12 @@ export function EditingToolbar() {
       name: 'Fill Gap',
       icon: '🔗',
       description: 'Fill GPS gaps',
+    },
+    {
+      id: 'redraw' as EditingTool,
+      name: 'Redraw',
+      icon: '✏️',
+      description: 'Redraw section with waypoints',
     },
   ];
 

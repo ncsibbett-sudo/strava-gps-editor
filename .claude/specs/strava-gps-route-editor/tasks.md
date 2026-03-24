@@ -270,7 +270,7 @@
   - _Requirements: 6_
 
 - [ ] 16. Build redraw tool with mode toggle
-  - [ ] 16.1 Create RedrawTool component structure
+  - [x] 16.1 Create RedrawTool component structure
     - Implement section selection (click start point, click end point)
     - Display selected section highlighted on map
     - Show mode toggle buttons: "Snap to Road" / "Freehand"
@@ -278,7 +278,7 @@
     - Write component tests for section selection
     - _Requirements: 7_
 
-  - [ ] 16.2 Implement snap-to-road mode
+  - [x] 16.2 Implement snap-to-road mode
     - Integrate OSRM routing API for route generation
     - Display loading indicator during routing request
     - Show routed path preview before confirmation
@@ -302,7 +302,7 @@
     - Write integration tests for mixed-mode redrawing
     - _Requirements: 7_
 
-  - [ ] 16.5 Implement elevation and time interpolation
+  - [x] 16.5 Implement elevation and time interpolation
     - Interpolate elevation for snap-to-road points
     - Interpolate timestamps based on distance
     - Maintain realistic pace for interpolated sections

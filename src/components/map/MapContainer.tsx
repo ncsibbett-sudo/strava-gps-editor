@@ -5,6 +5,7 @@ import { TrimTool } from './tools/TrimTool';
 import { RemoveSpikesTool } from './tools/RemoveSpikesTool';
 import { SmoothTool } from './tools/SmoothTool';
 import { FillGapTool } from './tools/FillGapTool';
+import { RedrawTool } from './tools/RedrawTool';
 import { useMap } from '../../hooks/useMap';
 
 /**
@@ -50,6 +51,7 @@ export function MapContainer() {
           {selectedTool === 'removeSpikes' && <RemoveSpikesTool />}
           {selectedTool === 'smooth' && <SmoothTool />}
           {selectedTool === 'fillGap' && <FillGapTool />}
+          {selectedTool === 'redraw' && <RedrawTool />}
         </div>
       )}
     </div>
