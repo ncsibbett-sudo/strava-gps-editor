@@ -18,33 +18,44 @@ export function applyMovingAverageSmoothing(track: GPSTrack, windowSize: number 
   }
 
   const halfWindow = Math.floor(windowSize / 2);
-  const smoothedPoints: GPSPoint[] = [];
+  const n = track.points.length;
+  const pts = track.points;
+  const smoothedPoints: GPSPoint[] = new Array(n);
 
-  for (let i = 0; i < track.points.length; i++) {
-    const point = track.points[i];
+  // Copy edge points unchanged
+  for (let i = 0; i < halfWindow; i++) {
+    smoothedPoints[i] = new GPSPoint(pts[i].lat, pts[i].lng, pts[i].elevation, pts[i].time, 0);
+  }
+  for (let i = n - halfWindow; i < n; i++) {
+    smoothedPoints[i] = new GPSPoint(pts[i].lat, pts[i].lng, pts[i].elevation, pts[i].time, 0);
+  }
 
-    // For edge points, just copy them
-    if (i < halfWindow || i >= track.points.length - halfWindow) {
-      smoothedPoints.push(new GPSPoint(point.lat, point.lng, point.elevation, point.time, 0));
-      continue;
+  // Seed the sliding window sum for the first full window
+  let sumLat = 0;
+  let sumLng = 0;
+  let sumElevation = 0;
+  for (let j = 0; j < windowSize; j++) {
+    sumLat += pts[j].lat;
+    sumLng += pts[j].lng;
+    sumElevation += pts[j].elevation;
+  }
+
+  // Slide the window across interior points in O(n)
+  for (let i = halfWindow; i < n - halfWindow; i++) {
+    smoothedPoints[i] = new GPSPoint(
+      sumLat / windowSize,
+      sumLng / windowSize,
+      sumElevation / windowSize,
+      pts[i].time,
+      0
+    );
+
+    // Slide: remove leftmost point, add next point on the right
+    if (i + halfWindow + 1 < n) {
+      sumLat += pts[i + halfWindow + 1].lat - pts[i - halfWindow].lat;
+      sumLng += pts[i + halfWindow + 1].lng - pts[i - halfWindow].lng;
+      sumElevation += pts[i + halfWindow + 1].elevation - pts[i - halfWindow].elevation;
     }
-
-    // Calculate average for window
-    let sumLat = 0;
-    let sumLng = 0;
-    let sumElevation = 0;
-
-    for (let j = i - halfWindow; j <= i + halfWindow; j++) {
-      sumLat += track.points[j].lat;
-      sumLng += track.points[j].lng;
-      sumElevation += track.points[j].elevation;
-    }
-
-    const avgLat = sumLat / windowSize;
-    const avgLng = sumLng / windowSize;
-    const avgElevation = sumElevation / windowSize;
-
-    smoothedPoints.push(new GPSPoint(avgLat, avgLng, avgElevation, point.time, 0));
   }
 
   return new GPSTrack(smoothedPoints, track.metadata);

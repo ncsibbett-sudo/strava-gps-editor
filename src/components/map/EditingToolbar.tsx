@@ -1,12 +1,34 @@
+import { useEffect } from 'react';
 import { useMap } from '../../hooks/useMap';
 
-export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redraw' | null;
+export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redraw' | 'deletePoints' | null;
 
 /**
- * Editing toolbar component with GPS editing tools
+ * Editing toolbar component with GPS editing tools, undo/redo, and reset
  */
 export function EditingToolbar() {
-  const { selectedTool, setSelectedTool, originalTrack } = useMap();
+  const { selectedTool, setSelectedTool, originalTrack, undo, redo, reset, canUndo, canRedo } = useMap();
+
+  // Keyboard shortcuts: Ctrl+Z = undo, Ctrl+Y / Ctrl+Shift+Z = redo, Escape = deselect tool
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedTool(null);
+        return;
+      }
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' && !e.shiftKey) {
+          e.preventDefault();
+          undo();
+        } else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+          e.preventDefault();
+          redo();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, setSelectedTool]);
 
   if (!originalTrack) {
     return null;
@@ -43,20 +65,21 @@ export function EditingToolbar() {
       icon: '✏️',
       description: 'Redraw section with waypoints',
     },
+    {
+      id: 'deletePoints' as EditingTool,
+      name: 'Delete Points',
+      icon: '🗑️',
+      description: 'Click points to delete them',
+    },
   ];
 
   const handleToolClick = (toolId: EditingTool) => {
-    if (selectedTool === toolId) {
-      // Deselect tool if clicking the same one
-      setSelectedTool(null);
-    } else {
-      setSelectedTool(toolId);
-    }
+    setSelectedTool(selectedTool === toolId ? null : toolId);
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-3">
-      <h3 className="text-xs font-semibold text-gray-300 mb-2">Editing Tools</h3>
+    <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-3 space-y-3">
+      <h3 className="text-xs font-semibold text-gray-300">Editing Tools</h3>
 
       <div className="grid grid-cols-2 gap-2">
         {tools.map((tool) => (
@@ -77,6 +100,35 @@ export function EditingToolbar() {
           </button>
         ))}
       </div>
+
+      {/* Undo / Redo */}
+      <div className="flex gap-2">
+        <button
+          onClick={undo}
+          disabled={!canUndo()}
+          title="Undo (Ctrl+Z)"
+          className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ↩ Undo
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo()}
+          title="Redo (Ctrl+Y)"
+          className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Redo ↪
+        </button>
+      </div>
+
+      {/* Reset to Original */}
+      <button
+        onClick={reset}
+        className="w-full px-3 py-2 bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white rounded text-xs font-medium transition-colors"
+        title="Reset all edits to the original track"
+      >
+        Reset to Original
+      </button>
     </div>
   );
 }

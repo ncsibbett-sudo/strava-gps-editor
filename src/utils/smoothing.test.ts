@@ -130,4 +130,38 @@ describe('Smoothing Utilities', () => {
       expect(smoothed2.points.length).toBe(track.points.length);
     });
   });
+
+  describe('performance', () => {
+    const createLargeTrack = (count: number): GPSTrack => {
+      const base = new Date('2024-01-01T10:00:00Z');
+      const points = Array.from({ length: count }, (_, i) =>
+        new GPSPoint(
+          40.0 + i * 0.0001,
+          -105.0 + i * 0.0001,
+          1000 + (i % 100),
+          new Date(base.getTime() + i * 1000),
+          0
+        )
+      );
+      return new GPSTrack(points);
+    };
+
+    it('moving average handles 50,000 points within 500ms', () => {
+      const track = createLargeTrack(50000);
+      const start = performance.now();
+      const result = applyMovingAverageSmoothing(track, 5);
+      const elapsed = performance.now() - start;
+      expect(result.points.length).toBe(50000);
+      expect(elapsed).toBeLessThan(500);
+    });
+
+    it('Gaussian smoothing handles 50,000 points within 500ms', () => {
+      const track = createLargeTrack(50000);
+      const start = performance.now();
+      const result = applyGaussianSmoothing(track, 2);
+      const elapsed = performance.now() - start;
+      expect(result.points.length).toBe(50000);
+      expect(elapsed).toBeLessThan(500);
+    });
+  });
 });

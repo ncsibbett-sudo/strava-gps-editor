@@ -13,6 +13,7 @@ import {
 } from '../../../utils/interpolation';
 
 type ToolMode = 'selectStart' | 'selectEnd' | 'placeWaypoints' | 'preview';
+type DrawingMode = 'snap-to-road' | 'freehand';
 
 /**
  * Redraw Section tool - allows redrawing sections of GPS track with waypoints and routing
@@ -22,6 +23,7 @@ export function RedrawTool() {
 
   // Tool state
   const [mode, setMode] = useState<ToolMode>('selectStart');
+  const [drawingMode, setDrawingMode] = useState<DrawingMode>('snap-to-road');
   const [startIndex, setStartIndex] = useState<number | null>(null);
   const [endIndex, setEndIndex] = useState<number | null>(null);
   const [waypoints, setWaypoints] = useState<L.LatLng[]>([]);
@@ -55,11 +57,32 @@ export function RedrawTool() {
     };
   }, [setPreviewTrack]);
 
-  // Update preview when waypoints or routing profile changes
+  // Build freehand path by connecting waypoints with straight-line segments
+  const buildFreehandPath = (allPoints: L.LatLng[]): Array<{ lat: number; lng: number }> => {
+    if (allPoints.length < 2) return allPoints.map(p => ({ lat: p.lat, lng: p.lng }));
+    const path: Array<{ lat: number; lng: number }> = [];
+    for (let i = 0; i < allPoints.length - 1; i++) {
+      const from = allPoints[i];
+      const to = allPoints[i + 1];
+      // Interpolate ~10 intermediate points per segment for smooth resampling
+      const steps = 10;
+      for (let s = 0; s < steps; s++) {
+        const t = s / steps;
+        path.push({
+          lat: from.lat + (to.lat - from.lat) * t,
+          lng: from.lng + (to.lng - from.lng) * t,
+        });
+      }
+    }
+    const last = allPoints[allPoints.length - 1];
+    path.push({ lat: last.lat, lng: last.lng });
+    return path;
+  };
+
+  // Update preview when waypoints, routing profile, or drawing mode changes
   useEffect(() => {
     if (
-      mode !== 'placeWaypoints' &&
-      mode !== 'preview' ||
+      (mode !== 'placeWaypoints' && mode !== 'preview') ||
       startIndex === null ||
       endIndex === null ||
       waypoints.length === 0
@@ -68,11 +91,10 @@ export function RedrawTool() {
     }
 
     const updatePreview = async () => {
-      setIsRouting(true);
+      setIsRouting(drawingMode === 'snap-to-road');
       setRoutingError(null);
 
       try {
-        // Build array of all points to route through
         const startPoint = L.latLng(
           editedTrack.points[startIndex].lat,
           editedTrack.points[startIndex].lng
@@ -83,15 +105,21 @@ export function RedrawTool() {
         );
         const allPoints = [startPoint, ...waypoints, endPoint];
 
-        // Route through all waypoints
-        const { segments, routingStatus: status } = await routeThroughWaypoints(
-          allPoints,
-          routingProfile
-        );
-        setRoutingStatus(status);
+        let combinedPoints: Array<{ lat: number; lng: number }>;
 
-        // Combine segments
-        const combinedPoints = combineRouteSegments(segments);
+        if (drawingMode === 'freehand') {
+          // Connect waypoints with straight lines
+          combinedPoints = buildFreehandPath(allPoints);
+          setRoutingStatus([]);
+        } else {
+          // Route through all waypoints via OSRM
+          const { segments, routingStatus: status } = await routeThroughWaypoints(
+            allPoints,
+            routingProfile
+          );
+          setRoutingStatus(status);
+          combinedPoints = combineRouteSegments(segments);
+        }
 
         // Resample to consistent spacing
         const targetSpacing = calculateAverageSpacing(editedTrack);
@@ -122,7 +150,7 @@ export function RedrawTool() {
     };
 
     updatePreview();
-  }, [waypoints, routingProfile, startIndex, endIndex, editedTrack, mode, setPreviewTrack]);
+  }, [waypoints, routingProfile, drawingMode, startIndex, endIndex, editedTrack, mode, setPreviewTrack]);
 
   // Find closest point on track to click location
   const findClosestTrackPoint = (clickLatLng: L.LatLng): number => {
@@ -329,7 +357,6 @@ export function RedrawTool() {
     if (startIndex === null || endIndex === null || waypoints.length === 0) return;
 
     try {
-      // Rebuild the modified track (same as preview logic)
       const startPoint = L.latLng(
         editedTrack.points[startIndex].lat,
         editedTrack.points[startIndex].lng
@@ -340,8 +367,14 @@ export function RedrawTool() {
       );
       const allPoints = [startPoint, ...waypoints, endPoint];
 
-      const { segments } = await routeThroughWaypoints(allPoints, routingProfile);
-      const combinedPoints = combineRouteSegments(segments);
+      let combinedPoints: Array<{ lat: number; lng: number }>;
+      if (drawingMode === 'freehand') {
+        combinedPoints = buildFreehandPath(allPoints);
+      } else {
+        const { segments } = await routeThroughWaypoints(allPoints, routingProfile);
+        combinedPoints = combineRouteSegments(segments);
+      }
+
       const targetSpacing = calculateAverageSpacing(editedTrack);
       const resampledPoints = resamplePath(combinedPoints, targetSpacing);
       const newGPSPoints = convertToGPSPoints(
@@ -405,8 +438,37 @@ export function RedrawTool() {
           <p className="text-xs text-blue-200">{getInstructions()}</p>
         </div>
 
-        {/* Routing Profile (only show when placing waypoints) */}
+        {/* Drawing Mode Toggle (always visible once section is selected) */}
         {(mode === 'placeWaypoints' || mode === 'preview') && (
+          <div>
+            <label className="block text-xs text-gray-400 mb-2">Drawing Mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setDrawingMode('snap-to-road')}
+                className={`px-3 py-2 rounded text-xs transition-colors ${
+                  drawingMode === 'snap-to-road'
+                    ? 'bg-strava-orange text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                Snap to Road
+              </button>
+              <button
+                onClick={() => setDrawingMode('freehand')}
+                className={`px-3 py-2 rounded text-xs transition-colors ${
+                  drawingMode === 'freehand'
+                    ? 'bg-strava-orange text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                Freehand
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Routing Profile (only show for snap-to-road mode) */}
+        {(mode === 'placeWaypoints' || mode === 'preview') && drawingMode === 'snap-to-road' && (
           <div>
             <label className="block text-xs text-gray-400 mb-2">Routing Profile</label>
             <div className="grid grid-cols-2 gap-2">

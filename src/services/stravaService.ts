@@ -216,6 +216,73 @@ class StravaService {
       body: JSON.stringify(updates),
     });
   }
+
+  /**
+   * Poll upload status until processing completes or fails.
+   * Strava processes uploads asynchronously — this polls until done.
+   * @param uploadId - Upload ID returned by uploadActivity
+   * @param maxWaitMs - Maximum time to wait in ms (default 60000)
+   * @returns Completed upload result with activity_id
+   */
+  async pollUploadStatus(
+    uploadId: number,
+    maxWaitMs: number = 60000
+  ): Promise<{ id: number; activity_id: number | null; status: string; error: string | null }> {
+    const startTime = Date.now();
+    const pollInterval = 2000; // 2 seconds between polls
+
+    while (Date.now() - startTime < maxWaitMs) {
+      const result = await this.authenticatedFetch<{
+        id: number;
+        activity_id: number | null;
+        status: string;
+        error: string | null;
+      }>(`/uploads/${uploadId}`);
+
+      if (result.error) {
+        throw new Error(`Upload processing failed: ${result.error}`);
+      }
+
+      if (result.activity_id !== null) {
+        return result; // Success — activity is ready
+      }
+
+      // Still processing — wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('Upload timed out after waiting for Strava to process the activity');
+  }
+
+  /**
+   * Delete an activity from Strava
+   * @param activityId - Strava activity ID to delete
+   */
+  async deleteActivity(activityId: number): Promise<void> {
+    const { tokens, refreshAccessToken } = useAuthStore.getState();
+    if (!tokens) throw new Error('Not authenticated');
+
+    const now = Date.now();
+    if (now >= tokens.expiresAt) {
+      await refreshAccessToken();
+    }
+
+    const response = await fetch(`${this.BASE_URL}/activities/${activityId}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
+      },
+    });
+
+    this.updateRateLimitInfo(response.headers);
+
+    if (!response.ok) {
+      const errorData: StravaAPIError = await response.json().catch(() => ({
+        message: 'Delete failed',
+      }));
+      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+    }
+  }
 }
 
 // Export singleton instance

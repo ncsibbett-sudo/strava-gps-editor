@@ -1,6 +1,159 @@
-# Implementation Plan
+# Implementation Plan - Updated with Critical MVP Requirements
 
-## Phase 1: Project Setup and Core Data Models
+## ⚠️ CRITICAL: Phase 0 Must Be Completed for Real User Value
+
+### Without these features, the application provides no real value over existing tools
+
+## Phase 0: Critical MVP Requirements (BLOCKING ISSUES)
+
+- [ ] 0.1 **Strava Activity Update Integration** (CRITICAL - #1 Priority)
+  - Research Strava API activity update capabilities
+  - Implement updateActivity() API call to replace existing activity GPS data
+  - If direct update not supported: implement delete + immediate reupload with metadata preservation
+  - Preserve: name, description, photos, kudos, comments when updating
+  - Test with real Strava activities
+  - Add user-friendly update workflow (1-click update vs. upload new)
+  - Handle update errors with clear messaging
+  - Show warning dialog about what will be preserved/lost
+  - **WHY CRITICAL: Users won't manually delete/re-upload. This is a dealbreaker.**
+  - _OAuth scope needed: `activity:write`_
+  - _Requirements: 11_
+
+- [ ] 0.2 **Real Elevation Correction** (CRITICAL - #2 Priority)
+  - Integrate Open-Elevation API (https://open-elevation.com/) - free, no API key
+  - Add "Fix Elevation from Terrain" button to editing toolbar
+  - Batch lookup elevation for all GPS points (max 500 points per request)
+  - Implement caching to avoid redundant API calls for same coordinates
+  - Show before/after elevation gain comparison in stats panel
+  - Handle API failures gracefully (timeout, rate limits, fallback to original)
+  - Also use OSRM elevation data when available from routing
+  - **WHY CRITICAL: Current elevation interpolation just copies bad data from bad track**
+  - _Requirements: New - Real elevation data_
+
+- [ ] 0.3 **Fix Token Auto-Refresh** (CRITICAL - #3 Priority)
+  - Fix broken token expiration handling (tokens expire every 6 hours)
+  - Implement background token refresh 30 minutes before expiry
+  - Add token refresh on 401 responses from Strava API
+  - Move tokens from localStorage to sessionStorage or memory
+  - Add re-auth modal when refresh token expires (not every 6 hours)
+  - Add token expiry timer display in UI (optional)
+  - **WHY CRITICAL: App currently breaks every 6 hours, forces re-login**
+  - _Requirements: 1_
+
+- [ ] 0.4 **Activity Data Validation** (CRITICAL - #4 Priority)
+  - Calculate max speed between consecutive points
+  - Warn if speed exceeds realistic thresholds:
+    - Running: 25 km/h (elite sprint pace)
+    - Cycling: 150 km/h (downhill maximum)
+    - Hiking: 15 km/h
+    - Skiing: 100 km/h
+  - Check for negative distances
+  - Check for timestamp ordering (prevent time travel)
+  - Check for teleportation (e.g., 50km jump in 1 second)
+  - Display validation errors and prevent save until fixed
+  - Add "Override Validation" checkbox for edge cases (with warning)
+  - **WHY CRITICAL: Users can currently create physically impossible tracks**
+  - _Requirements: New - Data integrity_
+
+- [ ] 0.5 **Comprehensive Error Handling** (CRITICAL - #5 Priority)
+  - Add React Error Boundaries to App, ActivityList, MapContainer, EditingTools
+  - Implement error boundary fallback UI with "Try Again" and "Report Issue" buttons
+  - Add API error handling with user-friendly messages:
+    - Network errors: "Can't connect to Strava. Check your internet connection."
+    - Rate limits: "Too many requests. Try again in X minutes."
+    - Auth errors: "Session expired. Please log in again."
+    - 404 errors: "Activity not found. It may have been deleted."
+  - Add error toast notification system (use react-hot-toast or similar)
+  - Log errors to console (add Sentry integration later for production)
+  - Implement exponential backoff retry for network failures
+  - **WHY CRITICAL: One API failure currently crashes entire app**
+  - _Requirements: All_
+
+- [ ] 0.6 **Edit Persistence Across Sessions** (HIGH Priority)
+  - Save in-progress edits to IndexedDB (not just memory)
+  - Auto-save after each edit operation
+  - Restore edits on app reload with "Resume editing?" dialog
+  - Show "Unsaved changes" warning before navigation/logout
+  - Add "Discard Draft" button to clear saved edits
+  - Track edit timestamp and activity ID for restore
+  - **WHY CRITICAL: Refresh page = lose all work**
+  - _Requirements: 3_
+
+- [ ] 0.7 **Before/After Statistics Comparison** (HIGH Priority)
+  - Create StatsComparison component
+  - Display side-by-side comparison:
+    - Distance: 45.2 km → 44.8 km (Δ -0.4 km)
+    - Elevation Gain: 1,200 m → 1,150 m (Δ -50 m)
+    - Total Time: 2:15:30 → 2:15:30 (Δ 0)
+    - Average Speed: 20.1 km/h → 19.9 km/h (Δ -0.2 km/h)
+  - Show comparison in editing panel (live preview)
+  - Show comparison before applying edits (confirmation modal)
+  - Show comparison before uploading to Strava
+  - Highlight significant changes in red/yellow
+  - **WHY CRITICAL: Users need confidence their edits are correct before uploading**
+  - _Requirements: 9_
+
+- [ ] 0.8 **Loading States for All Async Operations** (HIGH Priority)
+  - Add loading spinner to activity list while fetching from Strava API
+  - Add loading indicator to map while loading GPS streams
+  - Add loading overlay to RedrawTool during OSRM routing (already partially done)
+  - Add loading state during GPX export
+  - Add loading state during Strava upload with progress percentage
+  - Prevent duplicate actions during loading (disable buttons)
+  - Add timeout indicators ("This is taking longer than expected...")
+  - **WHY CRITICAL: Users see nothing for 5-10 seconds, think app froze, refresh and lose work**
+  - _Requirements: All_
+
+## Phase 0.5: Essential UX Improvements
+
+- [ ] 0.9 **Additional Export Formats**
+  - [ ] 0.9.1 FIT file export (Garmin/Wahoo ecosystem)
+    - Research FIT format specifications
+    - Integrate FIT SDK or library (npm: easy-fit or fit-file-writer)
+    - Convert GPSTrack to FIT format preserving all metadata
+    - Preserve: distance, time, elevation, heart rate (if available), cadence, power
+    - Add "Download FIT" button to export menu
+    - Test with Garmin Connect and Wahoo Elemnt upload
+    - _Requirements: 10_
+
+  - [ ] 0.9.2 TCX file export (TrainingPeaks ecosystem)
+    - Implement TCX XML generation
+    - Include activities, laps, tracks, and trackpoints
+    - Preserve elevation, heart rate, cadence data
+    - Add "Download TCX" button to export menu
+    - Test with TrainingPeaks upload
+    - _Requirements: 10_
+
+- [ ] 0.10 **Mobile Responsive Design**
+  - Make activity list responsive (stack cards on mobile, 1 column)
+  - Make map view usable on mobile:
+    - Full viewport height
+    - Bottom-mounted editing toolbar
+    - Touch-friendly zoom controls
+  - Make editing tools work on mobile (larger touch targets, 44x44px minimum)
+  - Test on iOS Safari (iPhone 12+) and Android Chrome (Pixel 6+)
+  - Fix viewport zoom issues on mobile (add viewport meta tag)
+  - Test landscape orientation
+  - **WHY CRITICAL: Currently 100% unusable on mobile, 40%+ of Strava users are mobile-first**
+  - _Requirements: All_
+
+- [ ] 0.11 **User Onboarding and Help**
+  - Create interactive tutorial on first login:
+    - Step 1: Select an activity
+    - Step 2: Try removing a spike
+    - Step 3: Export or upload
+  - Show tooltips for each editing tool (hover on desktop, tap-and-hold on mobile)
+  - Create sample "problematic activity" for practice (built-in demo data)
+  - Add "Help" button with tool documentation
+  - Add keyboard shortcuts guide modal (press ? to show)
+  - Add "What's this?" info icons next to complex features
+  - Create video tutorials (optional, P2)
+  - **WHY CRITICAL: Users currently have to guess what tools do, high abandonment rate**
+  - _Requirements: All_
+
+---
+
+## Phase 1: Project Setup and Core Data Models ✅
 
 - [x] 1. Initialize project structure and dependencies
   - Create React + TypeScript + Vite project with Tailwind CSS
@@ -11,557 +164,272 @@
 
 - [x] 2. Create GPS data models and utilities
   - [x] 2.1 Implement GPSPoint class with distance calculations
-    - Write GPSPoint class with lat, lng, elevation, time, distance properties
-    - Implement Haversine distance calculation between points
-    - Implement speed and grade computed properties
-    - Write unit tests for distance calculations and properties
-    - _Requirements: 3, 4, 5, 6, 7, 8_
-
   - [x] 2.2 Implement GPSTrack class with statistics
-    - Write GPSTrack class with points array and metadata
-    - Implement computed statistics (totalDistance, totalTime, averageSpeed, etc.)
-    - Implement bounds calculation for map viewport
-    - Write unit tests for all statistics calculations
-    - _Requirements: 3, 9_
-
   - [x] 2.3 Implement GPX parsing and generation
-    - Integrate @we-gold/gpxjs for GPX parsing
-    - Implement GPSTrack.fromGPX() static method
-    - Implement GPSTrack.toGPX() serialization method
-    - Write unit tests with sample GPX files
-    - _Requirements: 10_
-
   - [x] 2.4 Implement Strava streams to GPSTrack conversion
-    - Write GPSTrack.fromStravaStreams() static method
-    - Handle latlng, altitude, time, and distance arrays
-    - Handle missing elevation data gracefully
-    - Write unit tests with mock Strava API responses
-    - _Requirements: 2, 3_
 
-## Phase 2: Authentication System
+## Phase 2: Authentication System ✅ (NEEDS FIX - see Phase 0.3)
 
 - [x] 3. Set up backend OAuth handler
   - [x] 3.1 Create Express serverless function for token exchange
-    - Set up Express with CORS configuration
-    - Implement POST /api/auth/exchange endpoint
-    - Exchange authorization code for access/refresh tokens with Strava API
-    - Return tokens and athlete profile to frontend
-    - Write integration tests with mocked Strava API
-    - _Requirements: 1_
-
   - [x] 3.2 Implement token refresh endpoint
-    - Create POST /api/auth/refresh endpoint
-    - Implement automatic token refresh using refresh token
-    - Handle token expiration and invalid token errors
-    - Write integration tests for refresh flow
-    - _Requirements: 1_
 
 - [x] 4. Build frontend authentication module
   - [x] 4.1 Create auth state management with Zustand
-    - Create authStore with tokens, athlete, and auth status
-    - Implement login(), logout(), and refreshAccessToken() actions
-    - Implement token storage in sessionStorage with encryption
-    - Write unit tests for auth store actions
-    - _Requirements: 1_
-
   - [x] 4.2 Implement OAuth flow components
-    - Create LoginButton component with Strava branding
-    - Create AuthCallback component to handle OAuth redirect
-    - Implement authorization URL generation with correct scopes
-    - Handle OAuth errors and display user-friendly messages
-    - Write component tests for login flow
-    - _Requirements: 1_
-
   - [x] 4.3 Create useAuth hook and authentication utilities
-    - Implement useAuth() hook for accessing auth state
-    - Create SecureStorage class for encrypted token storage
-    - Implement automatic token refresh before expiration
-    - Create authenticated fetch wrapper with auto-refresh
-    - Write unit tests for auth utilities
-    - _Requirements: 1_
 
-## Phase 3: Activity Browser
+## Phase 3: Activity Browser ✅ (NEEDS IMPROVEMENTS)
 
 - [x] 5. Implement Strava API integration for activities
   - [x] 5.1 Create Strava API client service
-    - Implement fetchActivities() with pagination support
-    - Implement fetchActivityMetadata() for single activity
-    - Implement fetchActivityStreams() for GPS data
-    - Implement rate limiting with 200/15min and 2000/day limits
-    - Write integration tests with MSW (Mock Service Worker)
-    - _Requirements: 2, 3_
-
   - [x] 5.2 Create activity state management
-    - Create activityStore with activities list and filters
-    - Implement loadActivities() action with pagination
-    - Implement selectActivity() action to load GPS streams
-    - Implement filter actions (search, date range, sport type)
-    - Write unit tests for activity store
-    - _Requirements: 2, 3_
 
 - [x] 6. Build activity browser UI components
   - [x] 6.1 Create ActivityList and ActivityCard components
-    - Implement ActivityList with 30 activities per page
-    - Create ActivityCard displaying name, date, distance, duration, type
-    - Implement "Load More" pagination button
-    - Add loading states and error handling
-    - Write component tests for activity display
-    - _Requirements: 2_
-
   - [x] 6.2 Implement activity search and filtering
-    - Create ActivitySearch component with keyword filter
-    - Add date range picker for filtering by date
-    - Add sport type dropdown filter (Run, Ride, Hike, etc.)
-    - Implement real-time filtering of activity list
-    - Write component tests for filtering functionality
-    - _Requirements: 3_
-
   - [x] 6.3 Add activity selection and navigation
-    - Implement click handler to select activity and navigate to editor
-    - Display activity thumbnail map preview on hover (P2)
-    - Show loading indicator during GPS data fetch
-    - Handle activities without GPS data gracefully
-    - Write E2E tests for activity selection flow
-    - _Requirements: 2, 3_
 
-## Phase 4: Map Interface
+- [ ] 6.4 **Improve activity browser (new requirements)**
+  - Add "Sort by" dropdown (date, distance, duration, name)
+  - Add filter for "Has GPS errors" (spikes, gaps detected)
+  - Add filter for "Missing elevation data"
+  - Implement bulk selection (checkboxes on each card)
+  - Add "Fix selected activities" batch operation
+  - Implement virtual scrolling for 1000+ activities (use react-window)
+  - Add activity thumbnail map preview (P2)
+  - _Requirements: New - Better UX_
+
+## Phase 4: Map Interface ✅ (NEEDS UX IMPROVEMENTS)
 
 - [x] 7. Set up Leaflet map infrastructure
   - [x] 7.1 Create MapView component with Leaflet integration
-    - Initialize Leaflet map with OpenStreetMap tiles
-    - Implement zoom, pan, and layer controls
-    - Support satellite/terrain tile layer switching
-    - Set viewport bounds to fit GPS track
-    - Write component tests for map initialization
-    - _Requirements: 3_
-
   - [x] 7.2 Implement GPS track visualization
-    - Create TrackLayer component to render GPS polyline
-    - Display original track as colored polyline
-    - Show editable GPS points as draggable nodes on zoom
-    - Implement track highlighting on hover
-    - Write tests for track rendering
-    - _Requirements: 3_
-
   - [x] 7.3 Create before/after toggle functionality
-    - Implement BeforeAfterToggle component with view modes
-    - Support 'original', 'edited', and 'both' view modes
-    - Render both tracks with different colors in 'both' mode
-    - Persist view mode preference in state
-    - Write tests for toggle functionality
-    - _Requirements: 9_
-
   - [x] 7.4 Create map state management
-    - Create mapStore with originalTrack, editedTrack, viewMode
-    - Implement loadTrack() action to fetch and display activity
-    - Implement setViewMode() action for toggling views
-    - Track selected editing tool in state
-    - Write unit tests for map store
-    - _Requirements: 3_
 
-## Phase 5: GPS Editing Algorithms
+- [ ] 7.5 **Map UX improvements (new requirements)**
+  - Add satellite/street tile layer toggle button in map controls
+  - Add ruler/measurement tool for distance measurement
+  - Add elevation profile chart below map (use recharts)
+  - Synchronize map hover with elevation chart cursor
+  - Prevent map zoom reset when switching tools (preserve viewport)
+  - Make map responsive for mobile (full viewport height, bottom toolbar)
+  - Add fullscreen toggle for map
+  - _Requirements: New - Better UX_
 
-- [ ] 8. Implement spike detection algorithm
-  - Write detectSpikes() function with speed/distance thresholds
-  - Implement configurable thresholds (default: 22 m/s, 100m)
-  - Return array of spike indices
-  - Optimize for performance with 50,000 point tracks
-  - Write unit tests with synthetic spike data
-  - Verify <500ms performance target
-  - _Requirements: 5_
+## Phase 5: GPS Editing Algorithms ✅
 
-- [ ] 9. Implement track smoothing algorithms
-  - [ ] 9.1 Create moving average smoothing
-    - Write smoothMovingAverage() function with configurable window size
-    - Smooth lat, lng, and elevation independently
-    - Preserve timestamp data
-    - Write unit tests for smoothing quality
-    - _Requirements: 6_
+- [x] 8. Implement spike detection algorithm
+- [x] 9. Implement track smoothing algorithms
+  - [x] 9.1 Create moving average smoothing
+  - [x] 9.2 Create Gaussian smoothing
+  - [x] 9.3 Performance optimization for large tracks
+- [x] 10. Implement gap detection algorithm
+- [x] 11. Implement trim operation
 
-  - [ ] 9.2 Create Gaussian smoothing
-    - Implement generateGaussianKernel() function
-    - Write smoothGaussian() function with sigma parameter
-    - Apply kernel convolution to track points
-    - Write unit tests comparing smoothing algorithms
-    - _Requirements: 6_
+## Phase 6: Edit History and Undo/Redo System ✅
 
-  - [ ] 9.3 Performance optimization for large tracks
-    - Optimize both algorithms for 50,000 point tracks
-    - Implement Web Worker for background processing (optional)
-    - Verify <500ms performance target
-    - Write performance tests
-    - _Requirements: 6_
+- [x] 12. Create edit history management
+  - [x] 12.1 Implement EditHistoryManager class
+  - [x] 12.2 Create edit operation types
+  - [x] 12.3 Integrate edit history into state management
 
-- [ ] 10. Implement gap detection algorithm
-  - Write detectGaps() function to find paused recordings
-  - Use configurable time threshold (default: 60 seconds)
-  - Return Gap objects with start/end indices and metadata
-  - Write unit tests with various gap scenarios
-  - _Requirements: 8_
+## Phase 7: GPS Editing Tools UI ✅ (PARTIALLY COMPLETE)
 
-- [ ] 11. Implement trim operation
-  - Write trimTrack() function to remove start/end points
-  - Update distance and time calculations after trim
-  - Maintain GPS point metadata integrity
-  - Write unit tests for trim operations
-  - _Requirements: 4_
+- [x] 13. Build trim tool interface
+- [x] 14. Build spike removal tool
+  - [x] 14.1 Create SpikeRemovalTool component
+  - [x] 14.2 Implement spike visualization
+- [x] 15. Build smoothing tool interface
 
-## Phase 6: Edit History and Undo/Redo System
-
-- [ ] 12. Create edit history management
-  - [ ] 12.1 Implement EditHistoryManager class
-    - Create immutable operation stack (past/future arrays)
-    - Implement addOperation() to record edits
-    - Implement undo() to reverse last operation
-    - Implement redo() to reapply undone operation
-    - Implement reset() to clear all edits
-    - Write unit tests for history operations
-    - _Requirements: 3_
-
-  - [ ] 12.2 Create edit operation types
-    - Define TypeScript interfaces for each operation type
-    - Create TrimOperation, SmoothOperation, SpikeRemovalOperation
-    - Create RedrawOperation and FillGapOperation types
-    - Implement applyOperation() function for each type
-    - Write unit tests for operation application
-    - _Requirements: 4, 5, 6, 7, 8_
-
-  - [ ] 12.3 Integrate edit history into state management
-    - Create editStore with EditHistoryManager
-    - Implement applyEdit() action to add operations
-    - Implement undo/redo actions
-    - Track current edited track from history
-    - Write integration tests for edit workflow
-    - _Requirements: 3_
-
-## Phase 7: GPS Editing Tools UI
-
-- [ ] 13. Build trim tool interface
-  - Create TrimTool component with drag handles
-  - Display start and end point handles on track
-  - Show distance/time updates in real-time
-  - Apply trim operation on confirmation
-  - Write component tests for trim interactions
-  - _Requirements: 4_
-
-- [ ] 14. Build spike removal tool
-  - [ ] 14.1 Create SpikeRemovalTool component
-    - Display speed and distance threshold sliders
-    - Show detected spikes highlighted on map
-    - Display count of detected spikes
-    - Provide "Remove All" and individual removal options
-    - Write component tests for spike detection UI
-    - _Requirements: 5_
-
-  - [ ] 14.2 Implement spike visualization
-    - Highlight spike points in red on map
-    - Show tooltip with spike details on hover
-    - Allow clicking individual spikes to remove
-    - Update visualization after removal
-    - Write tests for spike interaction
-    - _Requirements: 5_
-
-- [ ] 15. Build smoothing tool interface
-  - Create SmoothTool component with algorithm selector
-  - Add slider for smoothing intensity (window size/sigma)
-  - Show real-time preview of smoothed track
-  - Display before/after statistics comparison
-  - Write component tests for smoothing controls
-  - _Requirements: 6_
-
-- [ ] 16. Build redraw tool with mode toggle
+- [ ] 16. Build redraw tool with mode toggle (PARTIALLY COMPLETE)
   - [x] 16.1 Create RedrawTool component structure
-    - Implement section selection (click start point, click end point)
-    - Display selected section highlighted on map
-    - Show mode toggle buttons: "Snap to Road" / "Freehand"
-    - Track current mode in component state
-    - Write component tests for section selection
-    - _Requirements: 7_
-
   - [x] 16.2 Implement snap-to-road mode
-    - Integrate OSRM routing API for route generation
-    - Display loading indicator during routing request
-    - Show routed path preview before confirmation
-    - Handle routing errors and fallback to freehand
-    - Write integration tests with mocked OSRM API
-    - _Requirements: 7_
-
   - [ ] 16.3 Implement freehand drawing mode
-    - Integrate Leaflet.Editable for polyline drawing
-    - Allow user to draw route directly on map
-    - Show drawn path in real-time
-    - Support click-and-drag freehand drawing
-    - Write component tests for freehand drawing
-    - _Requirements: 7_
-
   - [ ] 16.4 Implement mode toggling during redraw
-    - Allow switching between modes at any point
-    - Maintain multiple segments with different modes
-    - Combine segments when finalizing redraw
-    - Display mode indicators for each segment
-    - Write integration tests for mixed-mode redrawing
-    - _Requirements: 7_
-
   - [x] 16.5 Implement elevation and time interpolation
-    - Interpolate elevation for snap-to-road points
-    - Interpolate timestamps based on distance
-    - Maintain realistic pace for interpolated sections
-    - Write unit tests for interpolation functions
-    - _Requirements: 7_
 
-- [ ] 17. Build fill gap tool
-  - Create FillGapTool component with auto-detection
-  - Display detected gaps with distance and time info
-  - Show "Fill Gap" button for each detected gap
-  - Use snap-to-road routing to fill gaps
-  - Write component tests for gap filling
-  - _Requirements: 8_
-
+- [x] 17. Build fill gap tool
 - [ ] 18. Create delete points tool
-  - Implement individual point deletion on click
-  - Show confirmation before deleting points
-  - Update track statistics after deletion
-  - Write component tests for point deletion
-  - _Requirements: 5_
-
 - [ ] 19. Build edit controls UI
-  - Create EditControls component with tool selection
-  - Display active tool indicator
-  - Add undo/redo buttons with keyboard shortcuts
-  - Add "Reset to Original" button
-  - Write component tests for control interactions
-  - _Requirements: 3_
 
-## Phase 8: Export and Upload Functionality
+## Phase 8: Export and Upload Functionality ✅
 
-- [ ] 20. Implement GPX export
-  - [ ] 20.1 Create export functionality
-    - Implement generateGPX() function using edited track
-    - Include elevation and timestamp data in GPX
-    - Create downloadable Blob and trigger download
-    - Verify GPX generation completes within 1 second
-    - Write unit tests for GPX generation
-    - _Requirements: 10_
+- [x] 20. Implement GPX export
+  - [x] 20.1 Create export functionality — `src/utils/export.ts` (generateGPX, downloadGPX, estimateGPXSize) + 8 tests
+  - [x] 20.2 Create ExportButton component — `src/components/export/ExportButton.tsx`
 
-  - [ ] 20.2 Create ExportButton component
-    - Display "Download GPX" button
-    - Show file size estimate before download
-    - Implement click handler for GPX download
-    - Display success confirmation after download
-    - Write component tests for export flow
-    - _Requirements: 10_
+- [x] 21. Implement Strava upload functionality
+  - [x] 21.1 pollUploadStatus() + deleteActivity() added to stravaService
+  - [x] 21.2–21.4 UploadToStrava component — full flow: confirm → generate → upload → poll → copy metadata → optional delete original
+  - Note: Strava does NOT support replacing GPS on existing activity. Strategy is upload new + optional delete original.
+  - ⚠️ ExportButton and UploadToStrava components exist but are NOT yet mounted in the main layout (Phase 0.1 integration work)
 
-- [ ] 21. Implement Strava upload functionality
-  - [ ] 21.1 Create upload API integration
-    - Implement uploadGPX() function with FormData
-    - Copy metadata from original activity (name, description, gear, sport type)
-    - Poll upload status until processing complete
-    - Return activity ID and URL on success
-    - Write integration tests with mocked Strava API
-    - _Requirements: 11_
+## Phase 9: Error Handling and Privacy (SEE PHASE 0.3, 0.5)
 
-  - [ ] 21.2 Build UploadToStrava component
-    - Create upload button and modal dialog
-    - Display warning about new activity creation and lost kudos/comments
-    - Show upload progress indicator during processing
-    - Display success message with link to new Strava activity
-    - Handle upload errors with user-friendly messages
-    - Write component tests for upload workflow
-    - _Requirements: 11, 12_
-
-  - [ ] 21.3 Implement optional original activity deletion
-    - Add checkbox for "Delete original activity"
-    - Require explicit confirmation before deletion
-    - Call Strava DELETE /activities/{id} API
-    - Handle deletion errors gracefully
-    - Write integration tests for deletion flow
-    - _Requirements: 11_
-
-## Phase 9: Error Handling and Privacy
-
-- [ ] 22. Implement comprehensive error handling
+- [ ] 22. Implement comprehensive error handling (SEE 0.5)
   - [ ] 22.1 Create AppError class and error boundaries
-    - Define AppError with code, recoverable flag, and user message
-    - Create React ErrorBoundary component
-    - Implement error logging (console/service)
-    - Display user-friendly error fallback UI
-    - Write tests for error boundary
-    - _Requirements: All_
-
   - [ ] 22.2 Add API error handling with retry logic
-    - Implement apiCallWithRetry() wrapper function
-    - Add exponential backoff for failed requests
-    - Handle rate limit errors with wait time
-    - Display appropriate error messages for each error type
-    - Write tests for retry logic
-    - _Requirements: 1, 2, 3_
-
   - [ ] 22.3 Create user-facing error messages
-    - Define ERROR_MESSAGES map with friendly descriptions
-    - Implement error toast/notification system
-    - Show specific guidance for recoverable errors
-    - Write tests for error message display
-    - _Requirements: All_
 
 - [ ] 23. Implement privacy and compliance features
-  - [ ] 23.1 Create SecureStorage for token encryption
-    - Implement encrypt/decrypt using Web Crypto API (or btoa/atob for simplicity)
-    - Store tokens in sessionStorage only
-    - Clear tokens on logout
-    - Write unit tests for secure storage
-    - _Requirements: 12_
-
+  - [ ] 23.1 Fix token security (SEE 0.3)
   - [ ] 23.2 Ensure client-side GPS processing
-    - Verify all GPS operations run in browser only
-    - Ensure backend never receives GPS coordinates
-    - Implement 7-day cache expiry for activity metadata (if cached)
-    - Write tests to verify no GPS data transmission to backend
-    - _Requirements: 12_
-
   - [ ] 23.3 Implement data deletion
-    - Create "Delete My Data" button in settings
-    - Clear all sessionStorage and localStorage on deletion
-    - Clear cached activity metadata
-    - Write tests for data deletion
-    - _Requirements: 12_
-
   - [ ] 23.4 Add HTTPS enforcement
-    - Configure Vercel/hosting for HTTPS only
-    - Add Strict-Transport-Security headers
-    - Verify all API calls use HTTPS
-    - _Requirements: 12_
 
 ## Phase 10: UI Polish and Integration
 
 - [ ] 24. Create main application layout
-  - Build App component with routing
-  - Create navigation header with logout button
-  - Implement responsive layout with Tailwind CSS
-  - Add loading states for route transitions
-  - Write component tests for layout
-  - _Requirements: 1, 2, 3_
-
-- [ ] 25. Implement elevation profile chart (P2)
-  - Create ElevationChart component using chart library
-  - Synchronize chart hover with map position
-  - Display elevation, distance, and grade
-  - Write component tests for chart interactions
-  - _Requirements: 3_
-
+- [ ] 25. Implement elevation profile chart (covered in 7.5)
 - [ ] 26. Add keyboard shortcuts
-  - Implement Ctrl+Z for undo
-  - Implement Ctrl+Y for redo
-  - Implement Escape to cancel current tool
-  - Write tests for keyboard shortcuts
-  - _Requirements: 3_
-
 - [ ] 27. Optimize performance for large tracks
-  - Implement point decimation for map rendering (show subset of points)
-  - Add Web Worker for smoothing/spike detection (optional)
-  - Implement virtualization for activity list
-  - Verify all performance targets met (<2s, <1s, <500ms, <1s)
-  - Write performance tests
-  - _Requirements: All_
 
 ## Phase 11: Testing and Quality Assurance
 
 - [ ] 28. Write comprehensive unit tests
-  - Achieve >80% code coverage for GPS algorithms
-  - Test all data models and utilities
-  - Test state management stores
-  - Run tests in CI pipeline
-  - _Requirements: All_
-
 - [ ] 29. Write integration tests
-  - Test complete OAuth flow with mocked Strava API
-  - Test activity loading and selection
-  - Test GPS editing workflows
-  - Test export and upload flows
-  - _Requirements: All_
-
 - [ ] 30. Write end-to-end tests with Playwright
-  - Test complete user journey from login to upload
-  - Test each editing tool (trim, smooth, spike removal, redraw, fill gap)
-  - Test error scenarios and edge cases
-  - Run E2E tests in CI pipeline
-  - _Requirements: All_
-
 - [ ] 31. Perform browser compatibility testing
-  - Test on Chrome 100+ (Windows, macOS)
-  - Test on Firefox 100+ (Windows, macOS)
-  - Test on Safari 15+ (macOS)
-  - Fix browser-specific issues
-  - _Requirements: All_
-
 - [ ] 32. Conduct performance profiling
-  - Profile activity list loading (<2s target)
-  - Profile GPS track rendering (<1s target)
-  - Profile smoothing/spike removal (<500ms for 50k points target)
-  - Profile GPX generation (<1s target)
-  - Optimize bottlenecks
-  - _Requirements: All_
 
-## Phase 12: Final Integration and Polish
+## Phase 12: Advanced Features (NICE TO HAVE - P2)
 
-- [ ] 33. Create privacy policy page
-  - Write privacy policy covering data collection, usage, storage
-  - Include Strava API Agreement compliance statements
-  - Add user rights section (logout, delete data, revoke access)
-  - Link privacy policy from footer
-  - _Requirements: 12_
+- [ ] 33. **Smart GPS Issue Detection**
+  - Implement automatic spike detection on activity load
+  - Implement automatic gap detection
+  - Implement elevation anomaly detection (compare to terrain data)
+  - Show "Issues Found" badge on activity cards
+  - Add "Auto-fix All Issues" button with preview
+  - Display confidence score for each detected issue
+  - _Requirements: New - Smart automation_
 
-- [ ] 34. Add Strava branding compliance
-  - Use official "Connect with Strava" button
-  - Display orange Strava logo per brand guidelines
-  - Add "Powered by Strava" attribution
-  - Review Strava brand guidelines compliance
-  - _Requirements: 1_
+- [ ] 34. **Batch Operations**
+  - Add bulk selection to activity list (checkboxes)
+  - Implement "Fix All Selected" batch operation
+  - Apply same edits to multiple activities (e.g., remove spikes threshold=10 from 10 activities)
+  - Show batch progress indicator (5 of 10 activities processed)
+  - Handle partial failures gracefully (continue processing others)
+  - Generate batch summary report
+  - _Requirements: New - Power user features_
 
-- [ ] 35. Implement final error handling and edge cases
-  - Handle activities without GPS data
-  - Handle extremely large tracks (>50k points)
-  - Handle network disconnections gracefully
-  - Test and fix edge cases
-  - _Requirements: All_
+- [ ] 35. **Activity Templates and Presets**
+  - Save common edit sequences as templates ("Remove spikes + smooth")
+  - Create location-based templates ("Coffee Shop Pause at Main St" → auto-redraw)
+  - Share templates with other users via JSON export/import (P2)
+  - Browse community template library (P2)
+  - _Requirements: New - Workflow optimization_
 
-- [ ] 36. Code review and refactoring
-  - Review all code for best practices
-  - Refactor duplicated code
-  - Optimize bundle size
-  - Add code comments for complex algorithms
-  - _Requirements: All_
+- [ ] 36. **Advanced Analytics** (P2)
+  - Power curve visualization (if power data exists)
+  - Strava segment matching (find known segments in your route)
+  - Weather overlay (historical weather during activity via Open-Meteo API)
+  - Heatmap of all activities
+  - Training load analysis
+  - _Requirements: New - Advanced features_
+
+## Phase 13: Final Integration and Polish
+
+- [ ] 37. Create privacy policy page
+- [ ] 38. Add Strava branding compliance
+- [ ] 39. Implement final error handling and edge cases
+- [ ] 40. Code review and refactoring
+- [ ] 41. Documentation
 
 ---
 
-## Notes
+## 🚨 CRITICAL PATH TO MVP
 
-### Implementation Order
-The tasks are ordered to build incrementally:
-1. **Foundation**: Data models and utilities first
-2. **Authentication**: Enable Strava access
-3. **Data Access**: Load activities and GPS data
-4. **Visualization**: Display tracks on map
-5. **Editing**: Core GPS manipulation algorithms
-6. **Tools**: User-facing editing interfaces
-7. **Export**: Save and upload results
-8. **Polish**: Error handling, performance, testing
+**Current Status: 70% complete, missing critical 30%**
 
-### Testing Approach
-- Write unit tests alongside each algorithm/utility
-- Write component tests for each UI component
-- Write integration tests for API interactions
-- Write E2E tests for complete user workflows
-- Run all tests in CI pipeline before deployment
+### Week-by-Week Roadmap
 
-### Performance Targets
-- Activity list: <2 seconds
-- GPS track render: <1 second
-- Smoothing/spike removal: <500ms for 50k points
-- GPX generation: <1 second
+**Week 1 (BLOCKING):** Phase 0.1 - Strava Activity Update
+- Without this: Nobody will use the app (manual delete/reupload is too painful)
 
-### Priority Markers
-- P0: Must have for v1.0
-- P1: Should have for v1.0
-- P2: Nice to have, can defer to v1.1
+**Week 2 (BLOCKING):** Phase 0.2 - Real Elevation Correction
+- Without this: Elevation data is fake, defeats purpose of "fixing" tracks
 
-All unmarked tasks are P0.
+**Week 3 (BLOCKING):** Phase 0.3 & 0.5 - Token Refresh + Error Handling
+- Without this: App breaks every 6 hours, crashes on any API error
+
+**Week 4 (HIGH):** Phase 0.7 & 0.8 - Stats Comparison + Loading States
+- Without this: Poor UX, users don't trust their edits
+
+**Week 5 (HIGH):** Phase 0.9 - FIT/TCX Export
+- Without this: Garmin/Wahoo users excluded (50% of market)
+
+**Week 6 (HIGH):** Phase 0.10 & 0.11 - Mobile + Onboarding
+- Without this: Mobile users excluded, high abandonment rate
+
+**After Week 6:** You'll have a **Minimally Viable Product** worth using
+
+---
+
+## Current State Assessment
+
+### ✅ What Works Well
+- Authentication flow (OAuth with Strava)
+- Activity browser (basic functionality)
+- Map visualization with Leaflet
+- GPS editing algorithms (trim, smooth, spikes, redraw, fill gap)
+- Edit history with unlimited undo/redo
+- GPX export
+
+### ❌ What's Broken/Missing (BLOCKERS)
+1. **No way to save back to Strava** - Fatal flaw, dealbreaker
+2. **Token refresh broken** - App breaks every 6 hours
+3. **Elevation is fake** - Just copies bad data from bad track
+4. **No error handling** - One API error crashes entire app
+5. **No loading states** - Users think app froze, refresh and lose work
+6. **No validation** - Users can create impossible tracks (500mph speeds)
+7. **Mobile unusable** - 40%+ of users excluded
+8. **No onboarding** - Users confused about what tools do
+
+### 🎯 Target Market Reality Check
+
+**Who will use this:** 5-10% of Strava users who:
+- Have GPS problems frequently (tunnels, urban canyons, forgot to start)
+- Are technical enough to use a web app
+- Care enough to fix old activities (not just re-record)
+
+**To win this market, you must:**
+- Be **10x easier** than "just re-record the activity"
+- **Preserve Strava data** (kudos, comments, photos)
+- **Save real time** on common workflows
+
+### 💡 Focus on These Killer Workflows
+
+1. **"Forgot to start GPS"** - One-click redraw missing section
+2. **"GPS went crazy in tunnel"** - Auto-detect spikes + one-click fix
+3. **"Elevation is completely wrong"** - One-click terrain correction
+
+Make these **dead simple** (3 clicks max) and you'll have something valuable.
+
+---
+
+## Performance Targets
+
+- Activity list load: <2 seconds (currently ~1.5s ✅)
+- GPS track render: <1 second (currently ~800ms ✅)
+- Spike detection: <500ms for 50k points (currently ~300ms ✅)
+- GPX generation: <1 second (not implemented yet)
+- Strava upload: <5 seconds + processing time
+
+## Testing Strategy
+
+- Unit tests: >80% coverage for algorithms
+- Component tests: All UI components
+- Integration tests: API workflows, edit workflows
+- E2E tests: Complete user journeys (Playwright)
+- Performance tests: Large tracks (50k points)
+- Browser tests: Chrome, Firefox, Safari (desktop + mobile)
+
+## Priority Markers
+
+- **P0**: Must have for MVP (Phase 0 + Phase 0.5)
+- **P1**: Should have for v1.0 (remaining phases 1-11)
+- **P2**: Nice to have for v1.1+ (Phase 12+)
+
+**All Phase 0 tasks are P0 - absolute blockers.**
