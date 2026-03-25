@@ -8,7 +8,7 @@ export type EditingTool = 'trim' | 'smooth' | 'removeSpikes' | 'fillGap' | 'redr
  * Editing toolbar component with GPS editing tools, undo/redo, and reset
  */
 export function EditingToolbar() {
-  const { selectedTool, setSelectedTool, originalTrack, undo, redo, reset, canUndo, canRedo } = useMap();
+  const { selectedTool, setSelectedTool, originalTrack, undo, redo } = useMap();
   const [showHelp, setShowHelp] = useState(false);
 
   // Keyboard shortcuts: Ctrl+Z/Y = undo/redo, Escape = deselect, 1–7 = select tool
@@ -95,32 +95,6 @@ export function EditingToolbar() {
           ))}
         </div>
 
-        <div className="flex gap-2">
-          <button
-            onClick={undo}
-            disabled={!canUndo()}
-            title="Undo (Ctrl+Z)"
-            className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            ↩ Undo
-          </button>
-          <button
-            onClick={redo}
-            disabled={!canRedo()}
-            title="Redo (Ctrl+Y)"
-            className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Redo ↪
-          </button>
-        </div>
-
-        <button
-          onClick={reset}
-          className="w-full px-3 py-2 bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white rounded text-xs font-medium transition-colors"
-          title="Reset all edits to the original track"
-        >
-          Reset to Original
-        </button>
       </div>
 
       {/* ── Mobile layout: horizontal scrollable strip ─────────────────── */}
@@ -142,44 +116,6 @@ export function EditingToolbar() {
             </span>
           </button>
         ))}
-
-        {/* Divider */}
-        <div className="flex-shrink-0 w-px h-10 bg-gray-600 mx-1" />
-
-        {/* Undo */}
-        <button
-          onClick={undo}
-          disabled={!canUndo()}
-          title="Undo"
-          className="flex-shrink-0 flex flex-col items-center justify-center min-w-[48px] min-h-[56px] px-2 py-1 rounded-lg bg-gray-700 text-gray-300 active:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <span className="text-lg leading-none">↩</span>
-          <span className="text-[10px] mt-0.5">Undo</span>
-        </button>
-
-        {/* Redo */}
-        <button
-          onClick={redo}
-          disabled={!canRedo()}
-          title="Redo"
-          className="flex-shrink-0 flex flex-col items-center justify-center min-w-[48px] min-h-[56px] px-2 py-1 rounded-lg bg-gray-700 text-gray-300 active:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <span className="text-lg leading-none">↪</span>
-          <span className="text-[10px] mt-0.5">Redo</span>
-        </button>
-
-        {/* Divider */}
-        <div className="flex-shrink-0 w-px h-10 bg-gray-600 mx-1" />
-
-        {/* Reset */}
-        <button
-          onClick={reset}
-          title="Reset to original"
-          className="flex-shrink-0 flex flex-col items-center justify-center min-w-[48px] min-h-[56px] px-2 py-1 rounded-lg bg-gray-700 text-gray-300 active:bg-gray-600 hover:bg-red-800 hover:text-white transition-colors"
-        >
-          <span className="text-lg leading-none">↺</span>
-          <span className="text-[10px] mt-0.5">Reset</span>
-        </button>
 
         {/* Divider */}
         <div className="flex-shrink-0 w-px h-10 bg-gray-600 mx-1" />

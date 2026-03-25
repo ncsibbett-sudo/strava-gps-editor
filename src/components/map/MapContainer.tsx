@@ -28,6 +28,39 @@ function ActiveToolPanel({ selectedTool }: { selectedTool: string }) {
   );
 }
 
+function UndoRedoReset() {
+  const { undo, redo, reset, canUndo, canRedo } = useMap();
+  return (
+    <div className="bg-gray-800 rounded-lg border border-gray-700 p-3 space-y-2">
+      <div className="flex gap-2">
+        <button
+          onClick={undo}
+          disabled={!canUndo()}
+          title="Undo (Ctrl+Z)"
+          className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          ↩ Undo
+        </button>
+        <button
+          onClick={redo}
+          disabled={!canRedo()}
+          title="Redo (Ctrl+Y)"
+          className="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Redo ↪
+        </button>
+      </div>
+      <button
+        onClick={reset}
+        className="w-full px-3 py-2 bg-gray-700 hover:bg-red-700 text-gray-300 hover:text-white rounded text-xs font-medium transition-colors"
+        title="Reset all edits to the original track"
+      >
+        Reset to Original
+      </button>
+    </div>
+  );
+}
+
 /**
  * Container component that combines map view and controls.
  * Desktop: right-side panel + bottom-left toolbar.
@@ -74,6 +107,7 @@ export function MapContainer() {
               <UploadToStrava />
             </>
           )}
+          <UndoRedoReset />
         </div>
 
         {/* Fullscreen toggle — bottom-right corner */}
@@ -104,6 +138,7 @@ export function MapContainer() {
                 <UploadToStrava />
               </div>
             )}
+            <UndoRedoReset />
           </div>
 
           {/* Editing toolbar — horizontal strip at the very bottom */}
