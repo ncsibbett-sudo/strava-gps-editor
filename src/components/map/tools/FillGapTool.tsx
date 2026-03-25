@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMap } from '../../../hooks/useMap';
 import { GPSPoint } from '../../../models/GPSPoint';
 import { Gap } from '../../../models/GPSTrack';
@@ -10,6 +10,11 @@ export function FillGapTool() {
   const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
   const [minGapTime, setMinGapTime] = useState(30); // seconds
   const [detectedGaps, setDetectedGaps] = useState<Gap[]>([]);
+
+  // Ref so the preview effect reads the latest track without depending on it,
+  // preventing the preview from re-triggering after Apply clears it.
+  const editedTrackRef = useRef(editedTrack);
+  editedTrackRef.current = editedTrack;
 
   const fillGapsInTrack = (track: typeof editedTrack, gaps: Gap[]) => {
     if (!track || gaps.length === 0) return null;
@@ -55,19 +60,19 @@ export function FillGapTool() {
   };
 
   useEffect(() => {
-    if (editedTrack) {
-      const gaps = editedTrack.detectGaps(minGapTime);
+    const track = editedTrackRef.current;
+    if (track) {
+      const gaps = track.detectGaps(minGapTime);
       setDetectedGaps(gaps);
 
       // Update preview with filled gaps
       if (gaps.length > 0) {
-        const previewTrack = fillGapsInTrack(editedTrack, gaps);
-        setPreviewTrack(previewTrack);
+        setPreviewTrack(fillGapsInTrack(track, gaps));
       } else {
         setPreviewTrack(null);
       }
     }
-  }, [editedTrack, minGapTime, setPreviewTrack]);
+  }, [minGapTime, setPreviewTrack]);
 
   if (!editedTrack) return null;
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMap } from '../../../hooks/useMap';
 import { applyMovingAverageSmoothing, applyGaussianSmoothing } from '../../../utils/smoothing';
 
@@ -13,18 +13,25 @@ export function SmoothTool() {
   const [windowSize, setWindowSize] = useState(5);
   const [sigma, setSigma] = useState(2);
 
+  // Keep a ref so the preview effect always reads the latest track without
+  // depending on it — this prevents the preview from re-triggering after Apply
+  // clears it (which would hide the committed edit).
+  const editedTrackRef = useRef(editedTrack);
+  editedTrackRef.current = editedTrack;
+
   // Update preview when parameters change
   useEffect(() => {
-    if (editedTrack) {
+    const track = editedTrackRef.current;
+    if (track) {
       let smoothedTrack;
       if (algorithm === 'movingAverage') {
-        smoothedTrack = applyMovingAverageSmoothing(editedTrack, windowSize);
+        smoothedTrack = applyMovingAverageSmoothing(track, windowSize);
       } else {
-        smoothedTrack = applyGaussianSmoothing(editedTrack, sigma);
+        smoothedTrack = applyGaussianSmoothing(track, sigma);
       }
       setPreviewTrack(smoothedTrack);
     }
-  }, [editedTrack, algorithm, windowSize, sigma, setPreviewTrack]);
+  }, [algorithm, windowSize, sigma, setPreviewTrack]);
 
   if (!editedTrack) return null;
 

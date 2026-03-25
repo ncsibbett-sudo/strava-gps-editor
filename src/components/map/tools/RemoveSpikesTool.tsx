@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMap } from '../../../hooks/useMap';
 
 /**
@@ -10,20 +10,25 @@ export function RemoveSpikesTool() {
   const [distanceThreshold, setDistanceThreshold] = useState(100); // meters
   const [detectedSpikes, setDetectedSpikes] = useState<number[]>([]);
 
+  // Ref so the preview effect reads the latest track without depending on it,
+  // preventing the preview from re-triggering after Apply clears it.
+  const editedTrackRef = useRef(editedTrack);
+  editedTrackRef.current = editedTrack;
+
   useEffect(() => {
-    if (editedTrack) {
-      const spikes = editedTrack.detectSpikes(speedThreshold, distanceThreshold);
+    const track = editedTrackRef.current;
+    if (track) {
+      const spikes = track.detectSpikes(speedThreshold, distanceThreshold);
       setDetectedSpikes(spikes);
 
       // Update preview track with spikes removed
       if (spikes.length > 0) {
-        const previewTrack = editedTrack.removePoints(spikes);
-        setPreviewTrack(previewTrack);
+        setPreviewTrack(track.removePoints(spikes));
       } else {
         setPreviewTrack(null);
       }
     }
-  }, [editedTrack, speedThreshold, distanceThreshold, setPreviewTrack]);
+  }, [speedThreshold, distanceThreshold, setPreviewTrack]);
 
   if (!editedTrack) return null;
 

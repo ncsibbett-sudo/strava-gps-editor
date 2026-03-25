@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMap } from '../../../hooks/useMap';
 
 /**
@@ -9,19 +9,32 @@ export function TrimTool() {
   const [startIndex, setStartIndex] = useState(0);
   const [endIndex, setEndIndex] = useState(0);
 
+  // Ref so the preview effect reads the latest track without depending on it,
+  // preventing the preview from re-triggering after Apply clears it.
+  const editedTrackRef = useRef(editedTrack);
+  editedTrackRef.current = editedTrack;
+
+  // Reset sliders whenever the track changes (e.g. after Apply commits a trim)
   useEffect(() => {
     if (editedTrack) {
+      setStartIndex(0);
       setEndIndex(editedTrack.points.length - 1);
     }
   }, [editedTrack]);
 
-  // Update preview track when indices change
+  // Update preview track when slider positions change.
+  // Only show preview when the selection is actually non-trivial.
   useEffect(() => {
-    if (editedTrack && startIndex < endIndex) {
-      const previewTrack = editedTrack.trim(startIndex, endIndex);
-      setPreviewTrack(previewTrack);
+    const track = editedTrackRef.current;
+    if (!track) return;
+    if (startIndex > 0 || endIndex < track.points.length - 1) {
+      if (startIndex < endIndex) {
+        setPreviewTrack(track.trim(startIndex, endIndex));
+        return;
+      }
     }
-  }, [editedTrack, startIndex, endIndex, setPreviewTrack]);
+    setPreviewTrack(null);
+  }, [startIndex, endIndex, setPreviewTrack]);
 
   if (!editedTrack) return null;
 
