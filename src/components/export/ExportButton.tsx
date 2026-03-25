@@ -71,7 +71,7 @@ export function ExportButton() {
       {/* Validation Warning */}
       {!validationResult!.isValid && (
         <ValidationWarning
-          validationResult={validationResult}
+          validationResult={validationResult!}
           onOverride={() => setIsOverridden(true)}
           showOverride={true}
         />

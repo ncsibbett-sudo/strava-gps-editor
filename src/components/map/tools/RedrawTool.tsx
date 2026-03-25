@@ -70,6 +70,7 @@ export function RedrawTool() {
     let cancelled = false;
 
     const updatePreview = async () => {
+      if (!editedTrack) return;
       setIsRouting(true);
       setRoutingError(null);
 
@@ -111,6 +112,7 @@ export function RedrawTool() {
     if (drawingMode !== 'freehand') return;
     if (mode !== 'freehandDraw' && mode !== 'preview') return;
     if (startIndex === null || endIndex === null || freehandPoints.length < 2) return;
+    if (!editedTrack) return;
 
     const targetSpacing = calculateAverageSpacing(editedTrack);
     const rawPath = freehandPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
@@ -126,6 +128,7 @@ export function RedrawTool() {
 
   // ─── Find closest track point ─────────────────────────────────────────────
   const findClosestTrackPoint = (latlng: L.LatLng): number => {
+    if (!editedTrack) return 0;
     let minDist = Infinity;
     let closest = 0;
     editedTrack.points.forEach((pt, i) => {
@@ -154,7 +157,7 @@ export function RedrawTool() {
 
   const addSelectionMarker = (idx: number, label: string) => {
     const map = mapRef.current;
-    if (!map) return;
+    if (!map || !editedTrack) return;
     const pt = editedTrack.points[idx];
     const m = L.circleMarker([pt.lat, pt.lng], {
       radius: 10, color: '#fc4c02', fillColor: '#fc4c02', fillOpacity: 0.5, weight: 3,
@@ -313,7 +316,7 @@ export function RedrawTool() {
 
   // ─── Apply the redrawn section ────────────────────────────────────────────
   const handleApply = async () => {
-    if (startIndex === null || endIndex === null) return;
+    if (startIndex === null || endIndex === null || !editedTrack) return;
 
     try {
       let rawPath: Array<{ lat: number; lng: number }>;

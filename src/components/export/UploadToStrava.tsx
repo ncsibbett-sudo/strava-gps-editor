@@ -140,7 +140,7 @@ export function UploadToStrava() {
         {/* Validation Warning */}
         {!validationResult!.isValid && (
           <ValidationWarning
-            validationResult={validationResult}
+            validationResult={validationResult!}
             onOverride={() => setIsOverridden(true)}
             showOverride={true}
           />
@@ -300,7 +300,7 @@ export function UploadToStrava() {
       {/* Validation Warning (if any issues) */}
       {(!validationResult!.isValid || validationResult!.warnings.length > 0) && (
         <ValidationWarning
-          validationResult={validationResult}
+          validationResult={validationResult!}
           onOverride={() => setIsOverridden(true)}
           showOverride={!validationResult!.isValid}
         />
