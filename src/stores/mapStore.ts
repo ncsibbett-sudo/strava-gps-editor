@@ -121,15 +121,21 @@ export const useMapStore = create<MapState>((set, get) => ({
 
   /**
    * Set preview track for live preview before applying changes.
-   * Debounced at 60ms so rapid slider moves don't flood the renderer.
+   * Non-null updates are debounced at 60ms so rapid slider moves don't flood
+   * the renderer. Clearing (null) is always immediate so Reset/Undo feel instant.
    */
   setPreviewTrack: (() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     return (track: GPSTrack | null) => {
       if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        set({ previewTrack: track, viewMode: track ? 'both' : get().viewMode });
-      }, 60);
+      if (track === null) {
+        timer = null;
+        set({ previewTrack: null });
+      } else {
+        timer = setTimeout(() => {
+          set({ previewTrack: track, viewMode: 'both' });
+        }, 60);
+      }
     };
   })(),
 
@@ -223,6 +229,7 @@ export const useMapStore = create<MapState>((set, get) => ({
       set({
         editedTrack: editHistory[newIndex].clone(),
         historyIndex: newIndex,
+        previewTrack: null,
       });
     }
   },
@@ -237,6 +244,7 @@ export const useMapStore = create<MapState>((set, get) => ({
       set({
         editedTrack: editHistory[newIndex].clone(),
         historyIndex: newIndex,
+        previewTrack: null,
       });
     }
   },
