@@ -18,10 +18,15 @@ export function ExportButton() {
   const [isOverridden, setIsOverridden] = useState(false);
 
   const track = editedTrack ?? originalTrack;
-  if (!track) return null;
 
-  // Validate track
-  const validationResult = useMemo(() => validateTrack(track), [track]);
+  // Hoist useMemo before early return to comply with React hooks rules
+  const validationResult = useMemo(
+    () => (track ? validateTrack(track) : null),
+    [track]
+  );
+
+  if (!track) return null;
+  // validationResult is non-null here since track is non-null
 
   const sizeBytes = estimateGPXSize(track);
   const sizeLabel =
@@ -31,7 +36,7 @@ export function ExportButton() {
       ? `~${Math.round(sizeBytes / 1024)} KB`
       : `~${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 
-  const canDownload = validationResult.isValid || isOverridden;
+  const canDownload = validationResult!.isValid || isOverridden;
 
   const handleDownload = async (format: 'gpx' | 'fit' | 'tcx') => {
     if (!canDownload || isGenerating) return;
@@ -64,7 +69,7 @@ export function ExportButton() {
       )}
 
       {/* Validation Warning */}
-      {!validationResult.isValid && (
+      {!validationResult!.isValid && (
         <ValidationWarning
           validationResult={validationResult}
           onOverride={() => setIsOverridden(true)}

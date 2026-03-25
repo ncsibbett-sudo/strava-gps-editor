@@ -269,23 +269,37 @@ export const useMapStore = create<MapState>((set, get) => ({
    * Reset map state and discard any saved draft
    */
   reset: () => {
-    const { activityId } = get();
+    const { activityId, originalTrack } = get();
     if (activityId !== null) {
       deleteDraft(activityId).catch((err) => console.warn('Failed to delete draft:', err));
     }
-    set({
-      originalTrack: null,
-      editedTrack: null,
-      previewTrack: null,
-      activityId: null,
-      viewMode: 'original',
-      tileLayer: 'streets',
-      selectedTool: null,
-      isEditMode: false,
-      editHistory: [],
-      historyIndex: -1,
-      detectedIssues: null,
-      hoveredPointIndex: null,
-    });
+    if (originalTrack) {
+      const clonedTrack = originalTrack.clone();
+      set({
+        editedTrack: clonedTrack,
+        previewTrack: null,
+        viewMode: 'original',
+        selectedTool: null,
+        isEditMode: false,
+        editHistory: [clonedTrack],
+        historyIndex: 0,
+        hoveredPointIndex: null,
+      });
+    } else {
+      set({
+        originalTrack: null,
+        editedTrack: null,
+        previewTrack: null,
+        activityId: null,
+        viewMode: 'original',
+        tileLayer: 'streets',
+        selectedTool: null,
+        isEditMode: false,
+        editHistory: [],
+        historyIndex: -1,
+        detectedIssues: null,
+        hoveredPointIndex: null,
+      });
+    }
   },
 }));

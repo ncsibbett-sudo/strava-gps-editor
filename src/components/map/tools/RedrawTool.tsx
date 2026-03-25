@@ -50,8 +50,6 @@ export function RedrawTool() {
   const freehandPointsRef = useRef<L.LatLng[]>([]);
   const isDrawingRef = useRef(false);
 
-  if (!editedTrack) return null;
-
   // Clean up on unmount
   useEffect(() => {
     return () => {
@@ -391,6 +389,8 @@ export function RedrawTool() {
       default: return '';
     }
   };
+
+  if (!editedTrack) return null;
 
   const failedSegments = routingStatus.filter((s) => !s).length;
   const canApply = drawingMode === 'freehand'

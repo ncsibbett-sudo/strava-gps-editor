@@ -54,13 +54,18 @@ export function UploadToStrava() {
   }, [status]);
 
   const track = editedTrack ?? originalTrack;
+
+  // Hoist useMemo before early return to comply with React hooks rules
+  const validationResult = useMemo(
+    () => (track ? validateTrack(track) : null),
+    [track]
+  );
+
   if (!track || !selectedActivity) return null;
 
   const hasEdits = editedTrack !== null && editedTrack !== originalTrack;
-
-  // Validate track
-  const validationResult = useMemo(() => validateTrack(track), [track]);
-  const canProceed = validationResult.isValid || isOverridden;
+  // validationResult is non-null here since track is non-null
+  const canProceed = validationResult!.isValid || isOverridden;
 
   const handleUpload = async () => {
     if (!track || !selectedActivity) return;
@@ -133,7 +138,7 @@ export function UploadToStrava() {
         )}
 
         {/* Validation Warning */}
-        {!validationResult.isValid && (
+        {!validationResult!.isValid && (
           <ValidationWarning
             validationResult={validationResult}
             onOverride={() => setIsOverridden(true)}
@@ -293,11 +298,11 @@ export function UploadToStrava() {
       )}
 
       {/* Validation Warning (if any issues) */}
-      {(!validationResult.isValid || validationResult.warnings.length > 0) && (
+      {(!validationResult!.isValid || validationResult!.warnings.length > 0) && (
         <ValidationWarning
           validationResult={validationResult}
           onOverride={() => setIsOverridden(true)}
-          showOverride={!validationResult.isValid}
+          showOverride={!validationResult!.isValid}
         />
       )}
 
