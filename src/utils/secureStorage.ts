@@ -89,11 +89,19 @@ class SecureStorage {
   }
 
   /**
-   * Check if tokens will expire soon (within 5 minutes)
+   * Check if tokens will expire soon (within 30 minutes)
+   * Triggers proactive token refresh to avoid expiration during use
    */
   willExpireSoon(tokens: AuthTokens): boolean {
-    const fiveMinutes = 5 * 60 * 1000;
-    return Date.now() >= tokens.expiresAt - fiveMinutes;
+    const thirtyMinutes = 30 * 60 * 1000;
+    return Date.now() >= tokens.expiresAt - thirtyMinutes;
+  }
+
+  /**
+   * Get milliseconds until token expiration
+   */
+  getTimeUntilExpiry(tokens: AuthTokens): number {
+    return Math.max(0, tokens.expiresAt - Date.now());
   }
 }
 

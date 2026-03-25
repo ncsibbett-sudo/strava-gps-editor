@@ -12,295 +12,201 @@ import {
   calculateAverageSpacing,
 } from '../../../utils/interpolation';
 
-type ToolMode = 'selectStart' | 'selectEnd' | 'placeWaypoints' | 'preview';
+type ToolMode = 'selectStart' | 'selectEnd' | 'placeWaypoints' | 'freehandDraw' | 'preview';
 type DrawingMode = 'snap-to-road' | 'freehand';
 
+function getMap(): L.Map | null {
+  const el = document.querySelector('.leaflet-container');
+  return el ? (el as unknown as { _leaflet_map: L.Map })._leaflet_map ?? null : null;
+}
+
 /**
- * Redraw Section tool - allows redrawing sections of GPS track with waypoints and routing
+ * Redraw Section tool.
+ * Snap-to-road: place waypoints, OSRM routes between them.
+ * Freehand: hold and drag to sketch a path directly on the map.
  */
 export function RedrawTool() {
   const { editedTrack, setEditedTrack, setPreviewTrack } = useMap();
 
-  // Tool state
   const [mode, setMode] = useState<ToolMode>('selectStart');
   const [drawingMode, setDrawingMode] = useState<DrawingMode>('snap-to-road');
   const [startIndex, setStartIndex] = useState<number | null>(null);
   const [endIndex, setEndIndex] = useState<number | null>(null);
   const [waypoints, setWaypoints] = useState<L.LatLng[]>([]);
   const [routingProfile, setRoutingProfile] = useState<RoutingProfile>('bike');
-
-  // Routing state
   const [isRouting, setIsRouting] = useState(false);
   const [routingError, setRoutingError] = useState<string | null>(null);
   const [routingStatus, setRoutingStatus] = useState<boolean[]>([]);
 
-  // Map interaction refs
+  // Freehand drawing state
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [freehandPoints, setFreehandPoints] = useState<L.LatLng[]>([]);
+
   const mapRef = useRef<L.Map | null>(null);
   const selectionMarkersRef = useRef<L.CircleMarker[]>([]);
   const waypointMarkersRef = useRef<L.Marker[]>([]);
   const waypointLineRef = useRef<L.Polyline | null>(null);
+  const freehandLineRef = useRef<L.Polyline | null>(null);
+  const freehandPointsRef = useRef<L.LatLng[]>([]);
+  const isDrawingRef = useRef(false);
 
   if (!editedTrack) return null;
 
-  // Clean up markers when tool unmounts or track changes
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      selectionMarkersRef.current.forEach(marker => marker.remove());
-      selectionMarkersRef.current = [];
-      waypointMarkersRef.current.forEach(marker => marker.remove());
-      waypointMarkersRef.current = [];
-      if (waypointLineRef.current) {
-        waypointLineRef.current.remove();
-        waypointLineRef.current = null;
-      }
+      selectionMarkersRef.current.forEach((m) => m.remove());
+      waypointMarkersRef.current.forEach((m) => m.remove());
+      if (waypointLineRef.current) waypointLineRef.current.remove();
+      if (freehandLineRef.current) freehandLineRef.current.remove();
       setPreviewTrack(null);
     };
   }, [setPreviewTrack]);
 
-  // Build freehand path by connecting waypoints with straight-line segments
-  const buildFreehandPath = (allPoints: L.LatLng[]): Array<{ lat: number; lng: number }> => {
-    if (allPoints.length < 2) return allPoints.map(p => ({ lat: p.lat, lng: p.lng }));
-    const path: Array<{ lat: number; lng: number }> = [];
-    for (let i = 0; i < allPoints.length - 1; i++) {
-      const from = allPoints[i];
-      const to = allPoints[i + 1];
-      // Interpolate ~10 intermediate points per segment for smooth resampling
-      const steps = 10;
-      for (let s = 0; s < steps; s++) {
-        const t = s / steps;
-        path.push({
-          lat: from.lat + (to.lat - from.lat) * t,
-          lng: from.lng + (to.lng - from.lng) * t,
-        });
-      }
-    }
-    const last = allPoints[allPoints.length - 1];
-    path.push({ lat: last.lat, lng: last.lng });
-    return path;
-  };
-
-  // Update preview when waypoints, routing profile, or drawing mode changes
+  // ─── Snap-to-road: update preview whenever waypoints change ──────────────
   useEffect(() => {
-    if (
-      (mode !== 'placeWaypoints' && mode !== 'preview') ||
-      startIndex === null ||
-      endIndex === null ||
-      waypoints.length === 0
-    ) {
-      return;
-    }
+    if (drawingMode !== 'snap-to-road') return;
+    if (mode !== 'placeWaypoints' && mode !== 'preview') return;
+    if (startIndex === null || endIndex === null || waypoints.length === 0) return;
+
+    let cancelled = false;
 
     const updatePreview = async () => {
-      setIsRouting(drawingMode === 'snap-to-road');
+      setIsRouting(true);
       setRoutingError(null);
 
       try {
-        const startPoint = L.latLng(
-          editedTrack.points[startIndex].lat,
-          editedTrack.points[startIndex].lng
-        );
-        const endPoint = L.latLng(
-          editedTrack.points[endIndex].lat,
-          editedTrack.points[endIndex].lng
-        );
-        const allPoints = [startPoint, ...waypoints, endPoint];
+        const startPt = L.latLng(editedTrack.points[startIndex].lat, editedTrack.points[startIndex].lng);
+        const endPt = L.latLng(editedTrack.points[endIndex].lat, editedTrack.points[endIndex].lng);
+        const allPoints = [startPt, ...waypoints, endPt];
 
-        let combinedPoints: Array<{ lat: number; lng: number }>;
+        const { segments, routingStatus: status } = await routeThroughWaypoints(allPoints, routingProfile);
+        if (cancelled) return;
+        setRoutingStatus(status);
 
-        if (drawingMode === 'freehand') {
-          // Connect waypoints with straight lines
-          combinedPoints = buildFreehandPath(allPoints);
-          setRoutingStatus([]);
-        } else {
-          // Route through all waypoints via OSRM
-          const { segments, routingStatus: status } = await routeThroughWaypoints(
-            allPoints,
-            routingProfile
-          );
-          setRoutingStatus(status);
-          combinedPoints = combineRouteSegments(segments);
-        }
-
-        // Resample to consistent spacing
+        const combinedPoints = combineRouteSegments(segments);
         const targetSpacing = calculateAverageSpacing(editedTrack);
         const resampledPoints = resamplePath(combinedPoints, targetSpacing);
-
-        // Convert to GPS points with elevation/time interpolation
         const newGPSPoints = convertToGPSPoints(
           resampledPoints,
           editedTrack.points[startIndex],
           editedTrack.points[endIndex],
           editedTrack
         );
-
-        // Create preview track
-        const previewTrack = editedTrack.replaceSection(
-          startIndex,
-          endIndex,
-          newGPSPoints
-        );
-        setPreviewTrack(previewTrack);
-      } catch (error) {
-        console.error('Routing error:', error);
-        setRoutingError(error instanceof Error ? error.message : 'Routing failed');
-        setPreviewTrack(null);
+        setPreviewTrack(editedTrack.replaceSection(startIndex, endIndex, newGPSPoints));
+      } catch (err) {
+        if (!cancelled) {
+          setRoutingError(err instanceof Error ? err.message : 'Routing failed');
+          setPreviewTrack(null);
+        }
       } finally {
-        setIsRouting(false);
+        if (!cancelled) setIsRouting(false);
       }
     };
 
     updatePreview();
-  }, [waypoints, routingProfile, drawingMode, startIndex, endIndex, editedTrack, mode, setPreviewTrack]);
+    return () => { cancelled = true; };
+  }, [waypoints, routingProfile, startIndex, endIndex, editedTrack, mode, drawingMode, setPreviewTrack]);
 
-  // Find closest point on track to click location
-  const findClosestTrackPoint = (clickLatLng: L.LatLng): number => {
-    let minDistance = Infinity;
-    let closestIndex = 0;
+  // ─── Freehand: update preview whenever freehandPoints change ─────────────
+  useEffect(() => {
+    if (drawingMode !== 'freehand') return;
+    if (mode !== 'freehandDraw' && mode !== 'preview') return;
+    if (startIndex === null || endIndex === null || freehandPoints.length < 2) return;
 
-    editedTrack.points.forEach((point, index) => {
-      const distance = clickLatLng.distanceTo([point.lat, point.lng]);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = index;
-      }
+    const targetSpacing = calculateAverageSpacing(editedTrack);
+    const rawPath = freehandPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
+    const resampledPoints = resamplePath(rawPath, targetSpacing);
+    const newGPSPoints = convertToGPSPoints(
+      resampledPoints,
+      editedTrack.points[startIndex],
+      editedTrack.points[endIndex],
+      editedTrack
+    );
+    setPreviewTrack(editedTrack.replaceSection(startIndex, endIndex, newGPSPoints));
+  }, [freehandPoints, startIndex, endIndex, editedTrack, mode, drawingMode, setPreviewTrack]);
+
+  // ─── Find closest track point ─────────────────────────────────────────────
+  const findClosestTrackPoint = (latlng: L.LatLng): number => {
+    let minDist = Infinity;
+    let closest = 0;
+    editedTrack.points.forEach((pt, i) => {
+      const d = latlng.distanceTo([pt.lat, pt.lng]);
+      if (d < minDist) { minDist = d; closest = i; }
     });
-
-    return closestIndex;
+    return closest;
   };
 
-  // Handle track click for start/end point selection
+  // ─── Handle map clicks for start/end selection ────────────────────────────
   const handleTrackClick = (e: L.LeafletMouseEvent) => {
     if (mode === 'selectStart') {
-      const index = findClosestTrackPoint(e.latlng);
-      setStartIndex(index);
-
-      // Add selection marker
-      const marker = L.circleMarker(
-        [editedTrack.points[index].lat, editedTrack.points[index].lng],
-        {
-          radius: 10,
-          color: '#fc4c02',
-          fillColor: '#fc4c02',
-          fillOpacity: 0.5,
-          weight: 3,
-        }
-      );
-
-      if (mapRef.current) {
-        marker.addTo(mapRef.current);
-        marker.bindTooltip('START', { permanent: true, direction: 'top' });
-        selectionMarkersRef.current.push(marker);
-      }
-
+      const idx = findClosestTrackPoint(e.latlng);
+      setStartIndex(idx);
+      addSelectionMarker(idx, 'START');
       setMode('selectEnd');
     } else if (mode === 'selectEnd') {
-      const index = findClosestTrackPoint(e.latlng);
-
-      // Ensure end is after start
-      if (startIndex !== null && index > startIndex) {
-        setEndIndex(index);
-
-        // Add selection marker
-        const marker = L.circleMarker(
-          [editedTrack.points[index].lat, editedTrack.points[index].lng],
-          {
-            radius: 10,
-            color: '#fc4c02',
-            fillColor: '#fc4c02',
-            fillOpacity: 0.5,
-            weight: 3,
-          }
-        );
-
-        if (mapRef.current) {
-          marker.addTo(mapRef.current);
-          marker.bindTooltip('END', { permanent: true, direction: 'top' });
-          selectionMarkersRef.current.push(marker);
-        }
-
-        setMode('placeWaypoints');
+      const idx = findClosestTrackPoint(e.latlng);
+      if (startIndex !== null && idx > startIndex) {
+        setEndIndex(idx);
+        addSelectionMarker(idx, 'END');
+        setMode(drawingMode === 'freehand' ? 'freehandDraw' : 'placeWaypoints');
       }
     }
   };
 
-  // Handle map click for waypoint placement
+  const addSelectionMarker = (idx: number, label: string) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const pt = editedTrack.points[idx];
+    const m = L.circleMarker([pt.lat, pt.lng], {
+      radius: 10, color: '#fc4c02', fillColor: '#fc4c02', fillOpacity: 0.5, weight: 3,
+    });
+    m.addTo(map).bindTooltip(label, { permanent: true, direction: 'top' });
+    selectionMarkersRef.current.push(m);
+  };
+
+  // ─── Snap-to-road: map click → place waypoint ────────────────────────────
   const handleMapClick = (e: L.LeafletMouseEvent) => {
     if (mode !== 'placeWaypoints') return;
 
-    const newWaypoint = e.latlng;
-    const newWaypoints = [...waypoints, newWaypoint];
+    const newWaypoints = [...waypoints, e.latlng];
     setWaypoints(newWaypoints);
 
-    // Create waypoint marker
-    const markerIndex = newWaypoints.length;
+    const markerNum = newWaypoints.length;
     const icon = L.divIcon({
       html: `<div style="
-        background: ${markerIndex === 1 ? '#10b981' : '#3b82f6'};
-        color: white;
-        border-radius: 50%;
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        border: 3px solid white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      ">${markerIndex}</div>`,
+        background:#3b82f6;color:white;border-radius:50%;
+        width:28px;height:28px;display:flex;align-items:center;
+        justify-content:center;font-weight:bold;font-size:12px;
+        border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.4)
+      ">${markerNum}</div>`,
       className: '',
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
     });
 
-    const marker = L.marker(newWaypoint, {
-      icon,
-      draggable: true,
-    });
+    const marker = L.marker(e.latlng, { icon, draggable: true });
 
-    marker.on('dragend', (e) => {
-      const marker = e.target as L.Marker;
-      const newPos = marker.getLatLng();
-      const index = waypointMarkersRef.current.indexOf(marker);
-      if (index !== -1) {
-        const updatedWaypoints = [...waypoints];
-        updatedWaypoints[index] = newPos;
-        setWaypoints(updatedWaypoints);
-        updateWaypointLine(updatedWaypoints);
+    marker.on('dragend', () => {
+      const pos = marker.getLatLng();
+      const i = waypointMarkersRef.current.indexOf(marker);
+      if (i !== -1) {
+        const updated = [...waypoints];
+        updated[i] = pos;
+        setWaypoints(updated);
+        updateWaypointLine(updated);
       }
     });
 
     marker.on('contextmenu', () => {
-      const index = waypointMarkersRef.current.indexOf(marker);
-      if (index !== -1) {
-        const updatedWaypoints = waypoints.filter((_, i) => i !== index);
-        setWaypoints(updatedWaypoints);
+      const i = waypointMarkersRef.current.indexOf(marker);
+      if (i !== -1) {
+        const updated = waypoints.filter((_, j) => j !== i);
+        setWaypoints(updated);
         marker.remove();
-        waypointMarkersRef.current.splice(index, 1);
-
-        // Re-number remaining markers
-        waypointMarkersRef.current.forEach((m, i) => {
-          const newIcon = L.divIcon({
-            html: `<div style="
-              background: ${i === 0 ? '#10b981' : i === waypointMarkersRef.current.length - 1 ? '#ef4444' : '#3b82f6'};
-              color: white;
-              border-radius: 50%;
-              width: 32px;
-              height: 32px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-weight: bold;
-              border: 3px solid white;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            ">${i + 1}</div>`,
-            className: '',
-            iconSize: [32, 32],
-            iconAnchor: [16, 16],
-          });
-          m.setIcon(newIcon);
-        });
-
-        updateWaypointLine(updatedWaypoints);
+        waypointMarkersRef.current.splice(i, 1);
+        renumberWaypointIcons();
+        updateWaypointLine(updated);
       }
     });
 
@@ -311,84 +217,135 @@ export function RedrawTool() {
     }
   };
 
-  // Update connecting line between waypoints
-  const updateWaypointLine = (wpts: L.LatLng[]) => {
-    if (waypointLineRef.current) {
-      waypointLineRef.current.remove();
-      waypointLineRef.current = null;
-    }
+  const renumberWaypointIcons = () => {
+    waypointMarkersRef.current.forEach((m, i) => {
+      m.setIcon(L.divIcon({
+        html: `<div style="
+          background:#3b82f6;color:white;border-radius:50%;
+          width:28px;height:28px;display:flex;align-items:center;
+          justify-content:center;font-weight:bold;font-size:12px;
+          border:3px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.4)
+        ">${i + 1}</div>`,
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      }));
+    });
+  };
 
+  const updateWaypointLine = (wpts: L.LatLng[]) => {
+    if (waypointLineRef.current) { waypointLineRef.current.remove(); waypointLineRef.current = null; }
     if (wpts.length > 0 && mapRef.current) {
-      const line = L.polyline(wpts, {
-        color: '#3b82f6',
-        weight: 2,
-        opacity: 0.6,
-        dashArray: '5, 5',
-      });
-      line.addTo(mapRef.current);
-      waypointLineRef.current = line;
+      waypointLineRef.current = L.polyline(wpts, {
+        color: '#3b82f6', weight: 2, opacity: 0.5, dashArray: '5,5',
+      }).addTo(mapRef.current);
     }
   };
 
-  // Set up map event handlers
-  useEffect(() => {
-    // Get map instance from DOM (Leaflet map is already rendered by MapView)
-    const mapElement = document.querySelector('.leaflet-container');
-    if (mapElement && (mapElement as any)._leaflet_map) {
-      mapRef.current = (mapElement as any)._leaflet_map;
+  // ─── Freehand mouse handlers ──────────────────────────────────────────────
+  const startFreehandDraw = (e: L.LeafletMouseEvent) => {
+    if (mode !== 'freehandDraw') return;
+    isDrawingRef.current = true;
+    setIsDrawing(true);
+    freehandPointsRef.current = [e.latlng];
+    setFreehandPoints([e.latlng]);
 
-      // Add click handlers
-      if (mode === 'selectStart' || mode === 'selectEnd') {
-        if (mapRef.current) mapRef.current.on('click', handleTrackClick);
-      } else if (mode === 'placeWaypoints') {
-        if (mapRef.current) mapRef.current.on('click', handleMapClick);
-      }
-
-      return () => {
-        if (mapRef.current) {
-          mapRef.current.off('click', handleTrackClick);
-          mapRef.current.off('click', handleMapClick);
-        }
-      };
+    if (freehandLineRef.current) { freehandLineRef.current.remove(); freehandLineRef.current = null; }
+    if (mapRef.current) {
+      freehandLineRef.current = L.polyline([e.latlng], {
+        color: '#10b981', weight: 3, opacity: 0.8,
+      }).addTo(mapRef.current);
+      // Disable map drag while drawing
+      mapRef.current.dragging.disable();
     }
-  }, [mode, startIndex]);
+  };
 
+  const continueFreehandDraw = (e: L.LeafletMouseEvent) => {
+    if (!isDrawingRef.current) return;
+    freehandPointsRef.current = [...freehandPointsRef.current, e.latlng];
+    if (freehandLineRef.current) {
+      freehandLineRef.current.setLatLngs(freehandPointsRef.current);
+    }
+  };
+
+  const endFreehandDraw = () => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    setIsDrawing(false);
+    if (mapRef.current) mapRef.current.dragging.enable();
+
+    const pts = freehandPointsRef.current;
+    if (pts.length >= 2) {
+      setFreehandPoints([...pts]);
+      setMode('preview');
+    }
+  };
+
+  // ─── Wire map event handlers based on mode ────────────────────────────────
+  useEffect(() => {
+    const map = getMap();
+    if (!map) return;
+    mapRef.current = map;
+
+    // Always remove old handlers first
+    map.off('click');
+    map.off('mousedown');
+    map.off('mousemove');
+    map.off('mouseup');
+
+    if (mode === 'selectStart' || mode === 'selectEnd') {
+      map.on('click', handleTrackClick);
+    } else if (mode === 'placeWaypoints') {
+      map.on('click', handleMapClick);
+    } else if (mode === 'freehandDraw') {
+      map.on('mousedown', startFreehandDraw);
+      map.on('mousemove', continueFreehandDraw);
+      map.on('mouseup', endFreehandDraw);
+    }
+
+    return () => {
+      map.off('click');
+      map.off('mousedown');
+      map.off('mousemove');
+      map.off('mouseup');
+      if (mapRef.current) mapRef.current.dragging.enable();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, startIndex, waypoints, drawingMode]);
+
+  // ─── Apply the redrawn section ────────────────────────────────────────────
   const handleApply = async () => {
-    if (startIndex === null || endIndex === null || waypoints.length === 0) return;
+    if (startIndex === null || endIndex === null) return;
 
     try {
-      const startPoint = L.latLng(
-        editedTrack.points[startIndex].lat,
-        editedTrack.points[startIndex].lng
-      );
-      const endPoint = L.latLng(
-        editedTrack.points[endIndex].lat,
-        editedTrack.points[endIndex].lng
-      );
-      const allPoints = [startPoint, ...waypoints, endPoint];
+      let rawPath: Array<{ lat: number; lng: number }>;
 
-      let combinedPoints: Array<{ lat: number; lng: number }>;
       if (drawingMode === 'freehand') {
-        combinedPoints = buildFreehandPath(allPoints);
+        if (freehandPoints.length < 2) return;
+        rawPath = freehandPoints.map((p) => ({ lat: p.lat, lng: p.lng }));
       } else {
-        const { segments } = await routeThroughWaypoints(allPoints, routingProfile);
-        combinedPoints = combineRouteSegments(segments);
+        if (waypoints.length === 0) return;
+        const startPt = L.latLng(editedTrack.points[startIndex].lat, editedTrack.points[startIndex].lng);
+        const endPt = L.latLng(editedTrack.points[endIndex].lat, editedTrack.points[endIndex].lng);
+        const { segments } = await routeThroughWaypoints(
+          [startPt, ...waypoints, endPt],
+          routingProfile
+        );
+        rawPath = combineRouteSegments(segments);
       }
 
       const targetSpacing = calculateAverageSpacing(editedTrack);
-      const resampledPoints = resamplePath(combinedPoints, targetSpacing);
+      const resampledPoints = resamplePath(rawPath, targetSpacing);
       const newGPSPoints = convertToGPSPoints(
         resampledPoints,
         editedTrack.points[startIndex],
         editedTrack.points[endIndex],
         editedTrack
       );
-
-      const modifiedTrack = editedTrack.replaceSection(startIndex, endIndex, newGPSPoints);
-      setEditedTrack(modifiedTrack, true);
+      setEditedTrack(editedTrack.replaceSection(startIndex, endIndex, newGPSPoints), true);
       handleReset();
-    } catch (error) {
-      console.error('Failed to apply redraw:', error);
+    } catch (err) {
+      setRoutingError(err instanceof Error ? err.message : 'Failed to apply');
     }
   };
 
@@ -397,132 +354,148 @@ export function RedrawTool() {
     setStartIndex(null);
     setEndIndex(null);
     setWaypoints([]);
+    setFreehandPoints([]);
+    freehandPointsRef.current = [];
+    setIsDrawing(false);
+    isDrawingRef.current = false;
     setRoutingError(null);
     setRoutingStatus([]);
     setPreviewTrack(null);
 
-    // Clear all markers
-    selectionMarkersRef.current.forEach(marker => marker.remove());
+    selectionMarkersRef.current.forEach((m) => m.remove());
     selectionMarkersRef.current = [];
-    waypointMarkersRef.current.forEach(marker => marker.remove());
+    waypointMarkersRef.current.forEach((m) => m.remove());
     waypointMarkersRef.current = [];
-    if (waypointLineRef.current) {
-      waypointLineRef.current.remove();
-      waypointLineRef.current = null;
-    }
+    if (waypointLineRef.current) { waypointLineRef.current.remove(); waypointLineRef.current = null; }
+    if (freehandLineRef.current) { freehandLineRef.current.remove(); freehandLineRef.current = null; }
+    if (mapRef.current) mapRef.current.dragging.enable();
   };
 
-  const getInstructions = () => {
+  const handleSwitchDrawingMode = (dm: DrawingMode) => {
+    // Reset section selection when switching modes
+    setDrawingMode(dm);
+    handleReset();
+  };
+
+  const getInstruction = () => {
     switch (mode) {
-      case 'selectStart':
-        return 'Click on the track to select the start point of the section to redraw';
-      case 'selectEnd':
-        return 'Click on the track to select the end point of the section to redraw';
-      case 'placeWaypoints':
-      case 'preview':
-        return 'Click on the map to place waypoints along your actual route. Drag to adjust, right-click to remove.';
-      default:
-        return '';
+      case 'selectStart': return 'Click on the track to set the start of the section to redraw.';
+      case 'selectEnd': return 'Click on the track to set the end of the section.';
+      case 'placeWaypoints': return 'Click anywhere on the map to place waypoints along your route. Drag to adjust, right-click to remove.';
+      case 'freehandDraw': return isDrawing
+        ? 'Drawing — release the mouse when done.'
+        : 'Hold the mouse button and drag to draw your route freehand.';
+      case 'preview': return drawingMode === 'freehand'
+        ? 'Preview shown. Apply to commit or Reset to start over.'
+        : 'Preview shown. Adjust waypoints or Apply to commit.';
+      default: return '';
     }
   };
 
-  const failedSegments = routingStatus.filter(status => !status).length;
+  const failedSegments = routingStatus.filter((s) => !s).length;
+  const canApply = drawingMode === 'freehand'
+    ? freehandPoints.length >= 2 && !isDrawing
+    : waypoints.length > 0 && !isRouting;
 
   return (
     <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-      <h3 className="text-sm font-semibold text-white mb-4">Redraw Section</h3>
+      <h3 className="text-sm font-semibold text-white mb-3">Redraw Section</h3>
 
-      <div className="space-y-4">
-        {/* Instructions */}
-        <div className="bg-blue-900/30 border border-blue-700 rounded p-3">
-          <p className="text-xs text-blue-200">{getInstructions()}</p>
+      <div className="space-y-3">
+        {/* Drawing mode toggle — always visible */}
+        <div>
+          <label className="block text-xs text-gray-400 mb-1.5">Drawing Mode</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => handleSwitchDrawingMode('snap-to-road')}
+              className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                drawingMode === 'snap-to-road'
+                  ? 'bg-strava-orange text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              🛣️ Snap to Road
+            </button>
+            <button
+              onClick={() => handleSwitchDrawingMode('freehand')}
+              className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                drawingMode === 'freehand'
+                  ? 'bg-strava-orange text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              ✏️ Freehand
+            </button>
+          </div>
         </div>
 
-        {/* Drawing Mode Toggle (always visible once section is selected) */}
-        {(mode === 'placeWaypoints' || mode === 'preview') && (
-          <div>
-            <label className="block text-xs text-gray-400 mb-2">Drawing Mode</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setDrawingMode('snap-to-road')}
-                className={`px-3 py-2 rounded text-xs transition-colors ${
-                  drawingMode === 'snap-to-road'
-                    ? 'bg-strava-orange text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Snap to Road
-              </button>
-              <button
-                onClick={() => setDrawingMode('freehand')}
-                className={`px-3 py-2 rounded text-xs transition-colors ${
-                  drawingMode === 'freehand'
-                    ? 'bg-strava-orange text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Freehand
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Instructions */}
+        <div className={`rounded p-2.5 border text-xs leading-snug ${
+          isDrawing
+            ? 'bg-green-900/30 border-green-700 text-green-200'
+            : 'bg-blue-900/30 border-blue-700 text-blue-200'
+        }`}>
+          {getInstruction()}
+        </div>
 
-        {/* Routing Profile (only show for snap-to-road mode) */}
-        {(mode === 'placeWaypoints' || mode === 'preview') && drawingMode === 'snap-to-road' && (
+        {/* Routing profile — snap-to-road only */}
+        {drawingMode === 'snap-to-road' && (mode === 'placeWaypoints' || mode === 'preview') && (
           <div>
-            <label className="block text-xs text-gray-400 mb-2">Routing Profile</label>
+            <label className="block text-xs text-gray-400 mb-1.5">Routing Profile</label>
             <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setRoutingProfile('bike')}
-                className={`px-3 py-2 rounded text-xs transition-colors ${
-                  routingProfile === 'bike'
-                    ? 'bg-strava-orange text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Cycling
-              </button>
-              <button
-                onClick={() => setRoutingProfile('foot')}
-                className={`px-3 py-2 rounded text-xs transition-colors ${
-                  routingProfile === 'foot'
-                    ? 'bg-strava-orange text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                Walking/Running
-              </button>
+              {(['bike', 'foot'] as RoutingProfile[]).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setRoutingProfile(p)}
+                  className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                    routingProfile === p
+                      ? 'bg-strava-orange text-white'
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {p === 'bike' ? '🚴 Cycling' : '🏃 Running/Walking'}
+                </button>
+              ))}
             </div>
           </div>
         )}
 
         {/* Stats */}
         {startIndex !== null && endIndex !== null && (
-          <div className="bg-gray-900 rounded p-3">
-            <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-gray-900 rounded p-2.5 text-xs space-y-1">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <span className="text-gray-400">Section:</span>
-                <span className="ml-2 text-white font-semibold">
-                  {endIndex - startIndex + 1} points
-                </span>
+                <span className="ml-1 text-white font-semibold">{endIndex - startIndex + 1} pts</span>
               </div>
-              <div>
-                <span className="text-gray-400">Waypoints:</span>
-                <span className="ml-2 text-white font-semibold">{waypoints.length}</span>
-              </div>
+              {drawingMode === 'snap-to-road' && (
+                <div>
+                  <span className="text-gray-400">Waypoints:</span>
+                  <span className="ml-1 text-white font-semibold">{waypoints.length}</span>
+                </div>
+              )}
+              {drawingMode === 'freehand' && freehandPoints.length > 0 && (
+                <div>
+                  <span className="text-gray-400">Drawn pts:</span>
+                  <span className="ml-1 text-white font-semibold">{freehandPoints.length}</span>
+                </div>
+              )}
             </div>
             {isRouting && (
-              <p className="text-xs text-blue-400 mt-2">⏳ Routing...</p>
+              <div className="flex items-center gap-2 pt-1">
+                <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-blue-400">Routing via OSRM…</span>
+              </div>
             )}
             {failedSegments > 0 && (
-              <p className="text-xs text-yellow-400 mt-2">
+              <p className="text-yellow-400">
                 ⚠️ {failedSegments} segment{failedSegments > 1 ? 's' : ''} using straight line
               </p>
             )}
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Error */}
         {routingError && (
           <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-200">
             ⚠️ {routingError}
@@ -533,14 +506,14 @@ export function RedrawTool() {
         <div className="flex gap-2">
           <button
             onClick={handleApply}
-            disabled={waypoints.length === 0 || isRouting}
-            className="flex-1 px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!canApply}
+            className="flex-1 px-3 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Apply Redraw
           </button>
           <button
             onClick={handleReset}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
+            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded text-sm transition-colors"
           >
             Reset
           </button>

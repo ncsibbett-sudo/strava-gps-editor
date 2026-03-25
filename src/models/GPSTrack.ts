@@ -145,6 +145,37 @@ export class GPSTrack {
   }
 
   /**
+   * Alias for elevationGain — total elevation gain in meters
+   */
+  get totalElevationGain(): number {
+    return this.elevationGain;
+  }
+
+  /**
+   * Get minimum elevation in meters
+   */
+  get minElevation(): number {
+    if (this.points.length === 0) return 0;
+    let min = this.points[0].elevation;
+    for (let i = 1; i < this.points.length; i++) {
+      if (this.points[i].elevation < min) min = this.points[i].elevation;
+    }
+    return min;
+  }
+
+  /**
+   * Get maximum elevation in meters
+   */
+  get maxElevation(): number {
+    if (this.points.length === 0) return 0;
+    let max = this.points[0].elevation;
+    for (let i = 1; i < this.points.length; i++) {
+      if (this.points[i].elevation > max) max = this.points[i].elevation;
+    }
+    return max;
+  }
+
+  /**
    * Get total elevation loss in meters
    */
   get elevationLoss(): number {

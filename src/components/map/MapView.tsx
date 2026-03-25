@@ -34,8 +34,11 @@ export function MapView({ className = '' }: MapViewProps) {
     edited: L.Polyline | null;
     preview: L.Polyline | null;
   }>({ original: null, edited: null, preview: null });
+  // Track the last originalTrack identity so we only fitBounds on first load
+  const lastFitTrackRef = useRef<object | null>(null);
+  const hoverMarkerRef = useRef<L.CircleMarker | null>(null);
 
-  const { originalTrack, editedTrack, previewTrack, viewMode, tileLayer } = useMap();
+  const { originalTrack, editedTrack, previewTrack, viewMode, tileLayer, hoveredPointIndex } = useMap();
 
   // Initialize map
   useEffect(() => {
@@ -75,94 +78,99 @@ export function MapView({ className = '' }: MapViewProps) {
     tileLayerRef.current.options.attribution = selectedLayer.attribution;
   }, [tileLayer]);
 
-  // Update track visualization
+  // Update track visualization — uses setLatLngs to avoid costly DOM remove+recreate
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Remove existing track layers
-    if (trackLayersRef.current.original) {
+    const map = mapRef.current;
+    const isNewTrack = originalTrack && originalTrack !== lastFitTrackRef.current;
+    if (isNewTrack) lastFitTrackRef.current = originalTrack;
+
+    const POLYLINE_OPTS = { weight: 3, opacity: 0.8, smoothFactor: 2 } as const;
+
+    // ── Original polyline ───────────────────────────────────────────────────
+    const showOriginal = !!(originalTrack && (viewMode === 'original' || viewMode === 'both'));
+    if (showOriginal) {
+      const coords: L.LatLngExpression[] = originalTrack!.points.map((p) => [p.lat, p.lng]);
+      const color = viewMode === 'both' ? '#3b82f6' : '#fc4c02';
+      if (trackLayersRef.current.original) {
+        trackLayersRef.current.original.setLatLngs(coords);
+        trackLayersRef.current.original.setStyle({ color });
+      } else {
+        trackLayersRef.current.original = L.polyline(coords, { ...POLYLINE_OPTS, color }).addTo(map);
+      }
+    } else if (trackLayersRef.current.original) {
       trackLayersRef.current.original.remove();
       trackLayersRef.current.original = null;
     }
-    if (trackLayersRef.current.edited) {
+
+    // ── Edited polyline (hidden when preview is active) ─────────────────────
+    const showEdited = !!(editedTrack && !previewTrack && (viewMode === 'edited' || viewMode === 'both'));
+    if (showEdited) {
+      const coords: L.LatLngExpression[] = editedTrack!.points.map((p) => [p.lat, p.lng]);
+      if (trackLayersRef.current.edited) {
+        trackLayersRef.current.edited.setLatLngs(coords);
+      } else {
+        trackLayersRef.current.edited = L.polyline(coords, { ...POLYLINE_OPTS, color: '#fc4c02' }).addTo(map);
+      }
+    } else if (trackLayersRef.current.edited) {
       trackLayersRef.current.edited.remove();
       trackLayersRef.current.edited = null;
     }
-    if (trackLayersRef.current.preview) {
+
+    // ── Preview polyline ────────────────────────────────────────────────────
+    const showPreview = !!(previewTrack && (viewMode === 'edited' || viewMode === 'both'));
+    if (showPreview) {
+      const coords: L.LatLngExpression[] = previewTrack!.points.map((p) => [p.lat, p.lng]);
+      if (trackLayersRef.current.preview) {
+        trackLayersRef.current.preview.setLatLngs(coords);
+      } else {
+        trackLayersRef.current.preview = L.polyline(coords, {
+          ...POLYLINE_OPTS, color: '#3b82f6', opacity: 0.7, dashArray: '10, 10',
+        }).addTo(map);
+      }
+    } else if (trackLayersRef.current.preview) {
       trackLayersRef.current.preview.remove();
       trackLayersRef.current.preview = null;
     }
 
-    // Add original track if needed
-    if (originalTrack && (viewMode === 'original' || viewMode === 'both')) {
-      const coords: L.LatLngExpression[] = originalTrack.points.map((p) => [p.lat, p.lng]);
-      const originalPolyline = L.polyline(coords, {
-        color: viewMode === 'both' ? '#3b82f6' : '#fc4c02', // Blue if both, orange if original only
-        weight: 3,
-        opacity: 0.8,
-      }).addTo(mapRef.current);
-
-      trackLayersRef.current.original = originalPolyline;
-
-      // Fit bounds to original track
-      if (viewMode === 'original') {
-        mapRef.current.fitBounds(originalPolyline.getBounds(), { padding: [50, 50] });
-      }
-    }
-
-    // Add edited track if needed (but not if we have a preview)
-    if (editedTrack && !previewTrack && (viewMode === 'edited' || viewMode === 'both')) {
-      const coords: L.LatLngExpression[] = editedTrack.points.map((p) => [p.lat, p.lng]);
-      const editedPolyline = L.polyline(coords, {
-        color: viewMode === 'both' ? '#fc4c02' : '#fc4c02', // Orange
-        weight: 3,
-        opacity: 0.8,
-      }).addTo(mapRef.current);
-
-      trackLayersRef.current.edited = editedPolyline;
-
-      // Fit bounds to edited track
-      if (viewMode === 'edited') {
-        mapRef.current.fitBounds(editedPolyline.getBounds(), { padding: [50, 50] });
-      }
-    }
-
-    // Add preview track if available (shows instead of edited track)
-    if (previewTrack && (viewMode === 'edited' || viewMode === 'both')) {
-      const coords: L.LatLngExpression[] = previewTrack.points.map((p) => [p.lat, p.lng]);
-      const previewPolyline = L.polyline(coords, {
-        color: '#3b82f6', // Blue for preview
-        weight: 3,
-        opacity: 0.7,
-        dashArray: '10, 10', // Dashed line to indicate preview
-      }).addTo(mapRef.current);
-
-      trackLayersRef.current.preview = previewPolyline;
-    }
-
-    // Fit bounds logic
-    if (viewMode === 'both') {
+    // Only fitBounds on first load
+    if (isNewTrack) {
       const bounds = L.latLngBounds([]);
       let hasBounds = false;
-
-      if (trackLayersRef.current.original) {
-        bounds.extend(trackLayersRef.current.original.getBounds());
-        hasBounds = true;
-      }
-      if (trackLayersRef.current.edited) {
-        bounds.extend(trackLayersRef.current.edited.getBounds());
-        hasBounds = true;
-      }
-      if (trackLayersRef.current.preview) {
-        bounds.extend(trackLayersRef.current.preview.getBounds());
-        hasBounds = true;
-      }
-
-      if (hasBounds && mapRef.current) {
-        mapRef.current.fitBounds(bounds, { padding: [50, 50] });
-      }
+      if (trackLayersRef.current.original) { bounds.extend(trackLayersRef.current.original.getBounds()); hasBounds = true; }
+      if (trackLayersRef.current.edited) { bounds.extend(trackLayersRef.current.edited.getBounds()); hasBounds = true; }
+      if (hasBounds) map.fitBounds(bounds, { padding: [50, 50] });
     }
   }, [originalTrack, editedTrack, previewTrack, viewMode]);
+
+  // Show/move hover marker when elevation chart is hovered
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove existing hover marker
+    if (hoverMarkerRef.current) {
+      hoverMarkerRef.current.remove();
+      hoverMarkerRef.current = null;
+    }
+
+    if (hoveredPointIndex === null) return;
+
+    // Get the active track to find the point
+    const activeTrack = editedTrack || originalTrack;
+    if (!activeTrack) return;
+
+    const point = activeTrack.points[hoveredPointIndex];
+    if (!point) return;
+
+    hoverMarkerRef.current = L.circleMarker([point.lat, point.lng], {
+      radius: 7,
+      color: '#fff',
+      fillColor: '#fc4c02',
+      fillOpacity: 1,
+      weight: 2,
+    }).addTo(mapRef.current);
+  }, [hoveredPointIndex, editedTrack, originalTrack]);
 
   return (
     <div

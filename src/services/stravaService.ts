@@ -6,6 +6,8 @@ import type {
   StravaAPIError,
 } from '../types/strava';
 import { useAuthStore } from '../stores/authStore';
+import { translateHttpError } from '../utils/apiErrors';
+import { withRetry } from '../utils/retry';
 
 /**
  * Strava API client service with rate limiting
@@ -19,7 +21,7 @@ class StravaService {
 
   /**
    * Make authenticated request to Strava API
-   * Automatically refreshes token if expired
+   * Automatically refreshes token if expired or if 401 is received
    */
   private async authenticatedFetch<T>(
     endpoint: string,
@@ -37,23 +39,49 @@ class StravaService {
       await refreshAccessToken();
     }
 
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        ...options.headers,
-        Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const makeRequest = async () =>
+      fetch(`${this.BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+    const response = await withRetry(makeRequest);
 
     // Update rate limit info from response headers
     this.updateRateLimitInfo(response.headers);
 
+    // Handle 401 Unauthorized - token may be invalid, refresh and retry once
+    if (response.status === 401) {
+      console.log('Received 401 Unauthorized, refreshing token and retrying...');
+      await refreshAccessToken();
+
+      // Retry request with refreshed token
+      const retryResponse = await fetch(`${this.BASE_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...options.headers,
+          Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      this.updateRateLimitInfo(retryResponse.headers);
+
+      if (!retryResponse.ok) {
+        const errorData: StravaAPIError = await retryResponse.json().catch(() => ({ message: '' }));
+        throw translateHttpError(retryResponse.status, errorData.message);
+      }
+
+      return retryResponse.json();
+    }
+
     if (!response.ok) {
-      const errorData: StravaAPIError = await response.json().catch(() => ({
-        message: 'Unknown error',
-      }));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      const errorData: StravaAPIError = await response.json().catch(() => ({ message: '' }));
+      throw translateHttpError(response.status, errorData.message);
     }
 
     return response.json();
@@ -186,11 +214,33 @@ class StravaService {
 
     this.updateRateLimitInfo(response.headers);
 
+    // Handle 401 Unauthorized - refresh token and retry
+    if (response.status === 401) {
+      console.log('Upload received 401 Unauthorized, refreshing token and retrying...');
+      await refreshAccessToken();
+
+      // Retry upload with refreshed token
+      const retryResponse = await fetch(`${this.BASE_URL}/uploads`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
+        },
+        body: formData,
+      });
+
+      this.updateRateLimitInfo(retryResponse.headers);
+
+      if (!retryResponse.ok) {
+        const errorData: StravaAPIError = await retryResponse.json().catch(() => ({ message: '' }));
+        throw translateHttpError(retryResponse.status, errorData.message);
+      }
+
+      return retryResponse.json();
+    }
+
     if (!response.ok) {
-      const errorData: StravaAPIError = await response.json().catch(() => ({
-        message: 'Upload failed',
-      }));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      const errorData: StravaAPIError = await response.json().catch(() => ({ message: '' }));
+      throw translateHttpError(response.status, errorData.message);
     }
 
     return response.json();
@@ -276,11 +326,32 @@ class StravaService {
 
     this.updateRateLimitInfo(response.headers);
 
+    // Handle 401 Unauthorized - refresh token and retry
+    if (response.status === 401) {
+      console.log('Delete received 401 Unauthorized, refreshing token and retrying...');
+      await refreshAccessToken();
+
+      // Retry delete with refreshed token
+      const retryResponse = await fetch(`${this.BASE_URL}/activities/${activityId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${useAuthStore.getState().tokens?.accessToken}`,
+        },
+      });
+
+      this.updateRateLimitInfo(retryResponse.headers);
+
+      if (!retryResponse.ok) {
+        const errorData: StravaAPIError = await retryResponse.json().catch(() => ({ message: '' }));
+        throw translateHttpError(retryResponse.status, errorData.message);
+      }
+
+      return;
+    }
+
     if (!response.ok) {
-      const errorData: StravaAPIError = await response.json().catch(() => ({
-        message: 'Delete failed',
-      }));
-      throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
+      const errorData: StravaAPIError = await response.json().catch(() => ({ message: '' }));
+      throw translateHttpError(response.status, errorData.message);
     }
   }
 }

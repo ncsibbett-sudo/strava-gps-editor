@@ -247,9 +247,13 @@ describe('StravaService', () => {
     });
 
     it('should handle network errors', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      // withRetry retries up to 3 times on network errors — reject all attempts
+      (global.fetch as any).mockRejectedValue(new Error('Network error'));
 
       await expect(stravaService.fetchActivities()).rejects.toThrow('Network error');
+
+      // Reset to default resolved mock after test
+      (global.fetch as any).mockReset();
     });
   });
 });

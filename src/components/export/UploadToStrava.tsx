@@ -1,8 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useMap } from '../../hooks/useMap';
 import { useActivities } from '../../hooks/useActivities';
 import { stravaService } from '../../services/stravaService';
 import { generateGPX, downloadGPX } from '../../utils/export';
+import { validateTrack } from '../../services/validationService';
+import { ValidationWarning } from '../map/ValidationWarning';
+import { StatsComparison } from '../map/StatsComparison';
 
 type UploadStatus = 'idle' | 'confirming' | 'generating' | 'uploading' | 'processing' | 'success' | 'error';
 
@@ -24,11 +27,40 @@ export function UploadToStrava() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [deleteOriginal, setDeleteOriginal] = useState(false);
   const [backupFirst, setBackupFirst] = useState(true);
+  const [isOverridden, setIsOverridden] = useState(false);
+  const [processingSeconds, setProcessingSeconds] = useState(0);
+  const processingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track how long the 'processing' state has been active for timeout hints
+  useEffect(() => {
+    if (status === 'processing') {
+      setProcessingSeconds(0);
+      processingTimerRef.current = setInterval(() => {
+        setProcessingSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
+      setProcessingSeconds(0);
+    }
+    return () => {
+      if (processingTimerRef.current) {
+        clearInterval(processingTimerRef.current);
+        processingTimerRef.current = null;
+      }
+    };
+  }, [status]);
 
   const track = editedTrack ?? originalTrack;
   if (!track || !selectedActivity) return null;
 
   const hasEdits = editedTrack !== null && editedTrack !== originalTrack;
+
+  // Validate track
+  const validationResult = useMemo(() => validateTrack(track), [track]);
+  const canProceed = validationResult.isValid || isOverridden;
 
   const handleUpload = async () => {
     if (!track || !selectedActivity) return;
@@ -48,7 +80,7 @@ export function UploadToStrava() {
       const uploadResponse = await stravaService.uploadActivity(
         gpxContent,
         track.metadata.name,
-        selectedActivity.description,
+        selectedActivity.description ?? '',
         track.metadata.type.toLowerCase()
       );
 
@@ -63,7 +95,7 @@ export function UploadToStrava() {
       // Step 5: Copy metadata from original to new activity
       await stravaService.updateActivity(processed.activity_id, {
         name: selectedActivity.name,
-        description: selectedActivity.description,
+        description: selectedActivity.description ?? '',
         type: selectedActivity.type,
       });
 
@@ -94,6 +126,20 @@ export function UploadToStrava() {
     return (
       <div className="bg-gray-800 rounded-lg p-4 border border-yellow-600 space-y-4">
         <h3 className="text-sm font-semibold text-white">Upload to Strava</h3>
+
+        {/* Stats Comparison */}
+        {hasEdits && originalTrack && (
+          <StatsComparison originalTrack={originalTrack} editedTrack={track} />
+        )}
+
+        {/* Validation Warning */}
+        {!validationResult.isValid && (
+          <ValidationWarning
+            validationResult={validationResult}
+            onOverride={() => setIsOverridden(true)}
+            showOverride={true}
+          />
+        )}
 
         <div className="bg-yellow-900/30 border border-yellow-700 rounded p-3 text-xs text-yellow-200 space-y-1">
           <p className="font-semibold">⚠️ This will create a new Strava activity.</p>
@@ -131,7 +177,8 @@ export function UploadToStrava() {
         <div className="flex gap-2">
           <button
             onClick={handleUpload}
-            className="flex-1 px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors"
+            disabled={!canProceed}
+            className="flex-1 px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirm Upload
           </button>
@@ -154,13 +201,23 @@ export function UploadToStrava() {
       processing: 'Waiting for Strava to process activity...',
     };
 
+    const timeoutHint =
+      status === 'processing' && processingSeconds >= 30
+        ? 'Still processing... Large files can take a few minutes.'
+        : status === 'processing' && processingSeconds >= 15
+        ? 'This is taking longer than expected...'
+        : null;
+
     return (
       <div className="bg-gray-800 rounded-lg p-4 border border-gray-700 space-y-3">
         <h3 className="text-sm font-semibold text-white">Upload to Strava</h3>
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-strava-orange border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-strava-orange border-t-transparent rounded-full animate-spin flex-shrink-0" />
           <p className="text-sm text-gray-300">{messages[status]}</p>
         </div>
+        {timeoutHint && (
+          <p className="text-xs text-yellow-400">{timeoutHint}</p>
+        )}
       </div>
     );
   }
@@ -175,7 +232,7 @@ export function UploadToStrava() {
           href={result.activityUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="block w-full text-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-semibold text-sm transition-colors"
+          className="block w-full text-center px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors"
         >
           View on Strava →
         </a>
@@ -230,6 +287,20 @@ export function UploadToStrava() {
         </div>
       )}
 
+      {/* Stats Comparison (if edits were made) */}
+      {hasEdits && originalTrack && (
+        <StatsComparison originalTrack={originalTrack} editedTrack={track} />
+      )}
+
+      {/* Validation Warning (if any issues) */}
+      {(!validationResult.isValid || validationResult.warnings.length > 0) && (
+        <ValidationWarning
+          validationResult={validationResult}
+          onOverride={() => setIsOverridden(true)}
+          showOverride={!validationResult.isValid}
+        />
+      )}
+
       <div className="text-xs text-gray-400 space-y-1">
         <p>Activity: <span className="text-white">{selectedActivity.name}</span></p>
         <p>Points: <span className="text-white">{track.points.length.toLocaleString()}</span></p>
@@ -238,7 +309,8 @@ export function UploadToStrava() {
 
       <button
         onClick={() => setStatus('confirming')}
-        className="w-full px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors"
+        disabled={!canProceed}
+        className="w-full px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Upload to Strava
       </button>

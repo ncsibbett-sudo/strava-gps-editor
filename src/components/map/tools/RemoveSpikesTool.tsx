@@ -29,6 +29,8 @@ export function RemoveSpikesTool() {
 
   const handleRemoveSpikes = () => {
     if (!editedTrack || detectedSpikes.length === 0) return;
+    // Guard: ensure at least 3 points remain after removal
+    if (editedTrack.points.length - detectedSpikes.length < 3) return;
 
     const cleanedTrack = editedTrack.removePoints(detectedSpikes);
     setEditedTrack(cleanedTrack, true);
@@ -85,9 +87,18 @@ export function RemoveSpikesTool() {
         </div>
 
         {/* Actions */}
+        {detectedSpikes.length > 0 &&
+          editedTrack.points.length - detectedSpikes.length < 3 && (
+            <p className="text-xs text-yellow-400">
+              Cannot remove — fewer than 3 points would remain.
+            </p>
+          )}
         <button
           onClick={handleRemoveSpikes}
-          disabled={detectedSpikes.length === 0}
+          disabled={
+            detectedSpikes.length === 0 ||
+            editedTrack.points.length - detectedSpikes.length < 3
+          }
           className="w-full px-4 py-2 bg-strava-orange hover:bg-orange-600 text-white rounded font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {detectedSpikes.length > 0

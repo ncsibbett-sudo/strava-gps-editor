@@ -3,12 +3,19 @@ import type { StravaActivity, StravaActivityDetailed } from '../types/strava';
 import { stravaService } from '../services/stravaService';
 import { GPSTrack } from '../models/GPSTrack';
 import { streamsToTrack } from '../utils/strava';
+import { analyzeActivityHints, type ActivityHints } from '../services/issueDetectionService';
+
+export type SortField = 'date' | 'distance' | 'duration' | 'name';
+export type SortOrder = 'asc' | 'desc';
 
 export interface ActivityFilters {
   searchQuery: string;
   startDate?: Date;
   endDate?: Date;
   sportType?: string;
+  sortBy: SortField;
+  sortOrder: SortOrder;
+  missingElevation: boolean;
 }
 
 interface ActivityState {
@@ -29,6 +36,9 @@ interface ActivityState {
   // Filters
   filters: ActivityFilters;
 
+  // Issue hints per activity (derived from summary_polyline, no GPS stream needed)
+  activityHints: Record<number, ActivityHints>;
+
   // Computed
   getSportTypesByFrequency: () => Array<{ type: string; count: number }>;
 
@@ -47,6 +57,9 @@ const initialFilters: ActivityFilters = {
   startDate: undefined,
   endDate: undefined,
   sportType: undefined,
+  sortBy: 'date',
+  sortOrder: 'desc',
+  missingElevation: false,
 };
 
 export const useActivityStore = create<ActivityState>((set, get) => ({
@@ -64,6 +77,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   trackError: null,
 
   filters: initialFilters,
+  activityHints: {},
 
   /**
    * Get sport types sorted by frequency (most common first)
@@ -94,12 +108,19 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
     try {
       const activities = await stravaService.fetchActivities(page, 30);
 
+      // Compute lightweight issue hints from summary_polyline (no API calls)
+      const newHints: Record<number, ActivityHints> = {};
+      activities.forEach((a) => {
+        newHints[a.id] = analyzeActivityHints(a.map?.summary_polyline, a.total_elevation_gain);
+      });
+
       set((state) => ({
         activities: page === 1 ? activities : [...state.activities, ...activities],
         filteredActivities: page === 1 ? activities : [...state.activities, ...activities],
         currentPage: page,
         hasMore: activities.length === 30,
         isLoading: false,
+        activityHints: { ...state.activityHints, ...newHints },
       }));
 
       // Apply filters if any are set
@@ -217,7 +238,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
   },
 
   /**
-   * Apply filters to activities list
+   * Apply filters and sorting to activities list
    */
   applyFilters: () => {
     const { activities, filters } = get();
@@ -238,7 +259,6 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
         (activity) => new Date(activity.start_date) >= filters.startDate!
       );
     }
-
     if (filters.endDate) {
       filtered = filtered.filter(
         (activity) => new Date(activity.start_date) <= filters.endDate!
@@ -249,6 +269,28 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
     if (filters.sportType) {
       filtered = filtered.filter((activity) => activity.type === filters.sportType);
     }
+
+    // Missing elevation filter
+    if (filters.missingElevation) {
+      filtered = filtered.filter((activity) => activity.total_elevation_gain === 0);
+    }
+
+    // Sort
+    const dir = filters.sortOrder === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+      switch (filters.sortBy) {
+        case 'date':
+          return dir * (new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+        case 'distance':
+          return dir * (a.distance - b.distance);
+        case 'duration':
+          return dir * (a.moving_time - b.moving_time);
+        case 'name':
+          return dir * a.name.localeCompare(b.name);
+        default:
+          return 0;
+      }
+    });
 
     set({ filteredActivities: filtered });
   },
@@ -269,6 +311,7 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       isLoadingTrack: false,
       trackError: null,
       filters: initialFilters,
+      activityHints: {},
     });
   },
 }));
