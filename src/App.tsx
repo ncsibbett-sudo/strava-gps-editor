@@ -4,6 +4,7 @@ import { initializeAuth } from './stores/authStore';
 import { useAuth } from './hooks/useAuth';
 import { useActivities } from './hooks/useActivities';
 import { useMap } from './hooks/useMap';
+import { useMapStore } from './stores/mapStore';
 import { AuthCallback, LoginButton, LogoutButton } from './components/auth';
 import { ActivityList, ActivityFilters } from './components/activities';
 import { MapContainer } from './components/map';
@@ -28,7 +29,7 @@ function HomePage() {
     trackError,
     clearSelection,
   } = useActivities();
-  const { loadTrack, setEditedTrack, reset: resetMap, editedTrack, canUndo } = useMap();
+  const { loadTrack, setEditedTrack, editedTrack, canUndo } = useMap();
 
   const [pendingDraft, setPendingDraft] = useState<{
     originalTrack: GPSTrack;
@@ -73,8 +74,28 @@ function HomePage() {
   };
 
   const handleBackToList = () => {
+    // Delete any saved draft before clearing state
+    const { activityId } = useMapStore.getState();
+    if (activityId !== null) {
+      deleteDraft(activityId).catch(() => {});
+    }
     clearSelection();
-    resetMap();
+    // Fully clear the map state so inMapView becomes false.
+    // mapStore.reset() is now a soft "discard edits" reset that keeps
+    // originalTrack/editedTrack set, which would keep the app in map view.
+    useMapStore.setState({
+      originalTrack: null,
+      editedTrack: null,
+      previewTrack: null,
+      activityId: null,
+      viewMode: 'original',
+      selectedTool: null,
+      isEditMode: false,
+      editHistory: [],
+      historyIndex: -1,
+      detectedIssues: null,
+      hoveredPointIndex: null,
+    });
   };
 
   // Load track into map when selected — also check for a saved draft
